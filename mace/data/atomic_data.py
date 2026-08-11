@@ -4,8 +4,10 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
+from __future__ import annotations
+
 from copy import deepcopy
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
 
 import torch.utils.data
 
@@ -37,6 +39,8 @@ class AtomicData(torch_geometric.data.Data):
     energy: torch.Tensor
     stress: torch.Tensor
     virials: torch.Tensor
+    magmom: torch.Tensor
+    magforces: torch.Tensor
     dipole: torch.Tensor
     charges: torch.Tensor
     polarizability: torch.Tensor
@@ -50,6 +54,7 @@ class AtomicData(torch_geometric.data.Data):
     dipole_weight: torch.Tensor
     charges_weight: torch.Tensor
     polarizability_weight: torch.Tensor
+    magforces_weight: torch.Tensor
     density_coefficients: torch.Tensor
     rcell: torch.Tensor
     volume: torch.Tensor
@@ -73,6 +78,7 @@ class AtomicData(torch_geometric.data.Data):
         dipole_weight: Optional[torch.Tensor],  # [,]
         charges_weight: Optional[torch.Tensor],  # [,]
         polarizability_weight: Optional[torch.Tensor],  # [,]
+        magforces_weight: Optional[torch.Tensor],  # [,]
         forces: Optional[torch.Tensor],  # [n_nodes, 3]
         energy: Optional[torch.Tensor],  # [, ]
         stress: Optional[torch.Tensor],  # [1,3,3]
@@ -80,6 +86,8 @@ class AtomicData(torch_geometric.data.Data):
         dipole: Optional[torch.Tensor],  # [, 3]
         charges: Optional[torch.Tensor],  # [n_nodes, ]
         polarizability: Optional[torch.Tensor],  # [1, 3, 3]
+        magmom: Optional[torch.Tensor],  # [n_nodes, 3]
+        magforces: Optional[torch.Tensor],
         elec_temp: Optional[torch.Tensor],  # [,]
         total_charge: Optional[torch.Tensor] = None,  # [,]
         total_spin: Optional[torch.Tensor] = None,  # [,]
@@ -107,6 +115,7 @@ class AtomicData(torch_geometric.data.Data):
         assert virials_weight is None or len(virials_weight.shape) == 0
         assert dipole_weight is None or dipole_weight.shape == (1, 3), dipole_weight
         assert charges_weight is None or len(charges_weight.shape) == 0
+        assert magforces_weight is None or len(magforces_weight.shape) == 0
         assert cell is None or cell.shape == (3, 3)
         assert forces is None or forces.shape == (num_nodes, 3)
         assert energy is None or len(energy.shape) == 0
@@ -114,6 +123,8 @@ class AtomicData(torch_geometric.data.Data):
         assert virials is None or virials.shape == (1, 3, 3)
         assert dipole is None or dipole.shape[-1] == 3
         assert charges is None or charges.shape == (num_nodes,)
+        assert magmom is None or magmom.shape == (num_nodes, 3)
+        assert magforces is None or magforces.shape == (num_nodes, 3)
         assert elec_temp is None or len(elec_temp.shape) == 0
         assert total_charge is None or len(total_charge.shape) == 0
         assert total_spin is None or len(total_spin.shape) == 0
@@ -145,6 +156,7 @@ class AtomicData(torch_geometric.data.Data):
             "dipole_weight": dipole_weight,
             "charges_weight": charges_weight,
             "polarizability_weight": polarizability_weight,
+            "magforces_weight": magforces_weight,
             "forces": forces,
             "energy": energy,
             "stress": stress,
@@ -156,6 +168,8 @@ class AtomicData(torch_geometric.data.Data):
             "total_charge": total_charge,
             "total_spin": total_spin,
             "pbc": pbc,
+            "magmom": magmom,
+            "magforces": magforces,
             "density_coefficients": density_coefficients,
             "rcell": rcell,
             "volume": volume,
@@ -261,6 +275,7 @@ class AtomicData(torch_geometric.data.Data):
             if config.property_weights.get("charges") is not None
             else torch.tensor(1.0, dtype=torch.get_default_dtype())
         )
+
         polarizability_weight = (
             torch.tensor(
                 config.property_weights.get("polarizability"),
@@ -279,6 +294,16 @@ class AtomicData(torch_geometric.data.Data):
             )
         elif len(polarizability_weight.shape) == 2:
             polarizability_weight = polarizability_weight.unsqueeze(0)
+
+        magforces_weight = (
+            torch.tensor(
+                config.property_weights.get("magforces"),
+                dtype=torch.get_default_dtype(),
+            )
+            if config.property_weights.get("magforces") is not None
+            else torch.tensor(1.0, dtype=torch.get_default_dtype())
+        )
+
         forces = (
             torch.tensor(
                 config.properties.get("forces"), dtype=torch.get_default_dtype()
@@ -324,6 +349,20 @@ class AtomicData(torch_geometric.data.Data):
             )
             if config.properties.get("charges") is not None
             else torch.zeros(num_atoms, dtype=torch.get_default_dtype())
+        )
+        magmom = (
+            torch.tensor(
+                config.properties.get("magmom"), dtype=torch.get_default_dtype()
+            )
+            if config.properties.get("magmom") is not None
+            else torch.zeros(num_atoms, 3, dtype=torch.get_default_dtype())
+        )
+        magforces = (
+            torch.tensor(
+                config.properties.get("magforces"), dtype=torch.get_default_dtype()
+            )
+            if config.properties.get("magforces") is not None
+            else torch.zeros(num_atoms, 3, dtype=torch.get_default_dtype())
         )
         elec_temp = (
             torch.tensor(
@@ -400,6 +439,7 @@ class AtomicData(torch_geometric.data.Data):
         cls_kwargs = dict(
             edge_index=torch.tensor(edge_index, dtype=torch.long),
             positions=positions,
+            atomic_numbers=torch.tensor(config.atomic_numbers, dtype=torch.long),
             shifts=torch.tensor(shifts, dtype=torch.get_default_dtype()),
             unit_shifts=torch.tensor(unit_shifts, dtype=torch.get_default_dtype()),
             cell=cell,
@@ -413,12 +453,15 @@ class AtomicData(torch_geometric.data.Data):
             dipole_weight=dipole_weight,
             charges_weight=charges_weight,
             polarizability_weight=polarizability_weight,
+            magforces_weight=magforces_weight,
             forces=forces,
             energy=energy,
             stress=stress,
             virials=virials,
             dipole=dipole,
             charges=charges,
+            magmom=magmom,
+            magforces=magforces,
             elec_temp=elec_temp,
             total_charge=total_charge,
             polarizability=polarizability,
