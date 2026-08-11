@@ -40,3 +40,35 @@ dist/
 *.png
 /scripts
 *.cube
+
+# ---- local production / benchmark artifacts ----
+production_runs/
+production_archive/
+production_resume_safety/
+publication_candidates/
+pre_production_cleanup_*/
+interrupted_runs/
+
+# ---- MACE generated training outputs ----
+checkpoints/
+logs/
+results/
+parity_plots/
+
+# ---- generated model/checkpoint artifacts ----
+*.model
+*_compiled.model
+*.pt
+
+# ---- local scratch datasets ----
+train.xyz
+test.xyz
+train_subset*.xyz
+train_subset*_indices.txt
+train_no_offset_valid_indices_*.txt
+
+# ---- Python/build/cache ----
+build/
+*.egg-info/
+__pycache__/
+.pytest_cache/
