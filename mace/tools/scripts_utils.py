@@ -1065,6 +1065,17 @@ def get_params_options(
             "their submodules to the parameter groups in get_params_options:\n"
             + "\n".join(unregistered_parameter_names)
         )
+
+    if hasattr(model, "learned_rank2_body_tensor"):
+        param_options["params"].append(
+            {
+                "name": "learned_rank2",
+                "params": [model.learned_rank2_body_tensor],
+                "weight_decay": 0.0,
+                "lr": args.lr,
+            }
+        )
+
     return param_options
 
 
