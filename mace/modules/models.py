@@ -459,9 +459,13 @@ class MACE(torch.nn.Module):
                 data["quaternions"],
                 self.learned_rank2_body_tensor,
             )
+            edge_invariant_tensor = rigid_tensor
         else:
             rigid_tensor = data[self.rigid_tensor_key]
             rigid_irreps = data[self.rigid_irreps_key]
+            # Preserve legacy behavior for fixed rank-2 modes: node features may
+            # come from the selected tensor, but edge invariants remain MOI-based.
+            edge_invariant_tensor = data["inertia_tensor"]
         inertia_scalar = rigid_irreps[:, :1]
         inertia_tensor_irreps = rigid_irreps[:, 1:]
         if not self.use_rigid_scalar:
@@ -485,7 +489,7 @@ class MACE(torch.nn.Module):
             lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
         inertia_feats = inertia_edge_invariants(
-            rigid_tensor,
+            edge_invariant_tensor,
             data["edge_index"],
             vectors,
         )
@@ -676,9 +680,13 @@ class ScaleShiftMACE(MACE):
                 data["quaternions"],
                 self.learned_rank2_body_tensor,
             )
+            edge_invariant_tensor = rigid_tensor
         else:
             rigid_tensor = data[self.rigid_tensor_key]
             rigid_irreps = data[self.rigid_irreps_key]
+            # Preserve legacy behavior for fixed rank-2 modes: node features may
+            # come from the selected tensor, but edge invariants remain MOI-based.
+            edge_invariant_tensor = data["inertia_tensor"]
         inertia_scalar = rigid_irreps[:, :1]
         inertia_tensor_irreps = rigid_irreps[:, 1:]
         if not self.use_rigid_scalar:
@@ -702,7 +710,7 @@ class ScaleShiftMACE(MACE):
             lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
         inertia_feats = inertia_edge_invariants(
-            rigid_tensor,
+            edge_invariant_tensor,
             data["edge_index"],
             vectors,
         )
