@@ -109,7 +109,7 @@ class RigidPairTensorProductFeatures(torch.nn.Module):
 
         if edge_vectors.shape[0] != edge_index.shape[1]:
             raise ValueError(
-                "edge_vectors and edge_index must contain the same " "number of edges"
+                "edge_vectors and edge_index must contain the same number of edges"
             )
 
         distances = torch.linalg.vector_norm(
@@ -119,7 +119,7 @@ class RigidPairTensorProductFeatures(torch.nn.Module):
 
         if torch.any(distances <= 1.0e-12):
             raise ValueError(
-                "RigidPairTensorProductFeatures does not support " "zero-length edges"
+                "RigidPairTensorProductFeatures does not support zero-length edges"
             )
 
         directions = edge_vectors / distances.unsqueeze(-1)
@@ -321,13 +321,13 @@ class RigidPairRawEdgeEmbedding(torch.nn.Module):
 
 
 def validate_rigid_pair_mode(mode: str) -> str:
+    """Validate the rigid-pair edge representation mode."""
     if mode in (
         "c2_frame",
         "d6_frame",
         "d6_frame_compact",
     ):
         return mode
-    """Validate the rigid-pair edge representation mode."""
     valid_modes = {
         "none",
         "full_frame",

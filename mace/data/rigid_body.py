@@ -8,7 +8,6 @@ mass, principal moments are Ixx=(b^2+c^2)/20 etc.  Set mass_scale if needed.
 from __future__ import annotations
 
 import torch
-from e3nn import o3
 from e3nn.io import CartesianTensor
 
 

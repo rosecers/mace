@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 ###########################################################################################
 # Implementation of MACE models and other models based E(3)-Equivariant MPNNs
 # Authors: Ilyes Batatia, Gregor Simm

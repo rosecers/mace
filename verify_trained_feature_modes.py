@@ -16,10 +16,10 @@ DATA = (
 )
 
 
-def energy(atoms, calculator) -> float:
-    trial = atoms.copy()
-    calculator.reset()
-    trial.calc = calculator
+def energy(structure, calc) -> float:
+    trial = structure.copy()
+    calc.reset()
+    trial.calc = calc
     return float(trial.get_potential_energy())
 
 

@@ -80,7 +80,7 @@ def rigid_pair_geometry(
 
     if edge_vectors.shape[0] != edge_index.shape[1]:
         raise ValueError(
-            "edge_vectors and edge_index must contain the same " "number of edges"
+            "edge_vectors and edge_index must contain the same number of edges"
         )
 
     rotations = quaternion_to_matrix(quaternions)
