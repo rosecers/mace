@@ -145,10 +145,7 @@ class MACE(torch.nn.Module):
         keep_last_layer_irreps: bool = False,
         rigid_feature_mode: str = "moi",
         rigid_pair_mode: str = "none",
-<<<<<<< HEAD
         rigid_pair_multiplicity: int = 1,
-=======
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
     ):
         super().__init__()
         self.register_buffer(
@@ -176,7 +173,6 @@ class MACE(torch.nn.Module):
         self.rigid_feature_mode = validate_rigid_feature_mode(rigid_feature_mode)
         self.rigid_pair_mode = validate_rigid_pair_mode(rigid_pair_mode)
 
-<<<<<<< HEAD
         if (
             isinstance(rigid_pair_multiplicity, bool)
             or not isinstance(rigid_pair_multiplicity, int)
@@ -189,8 +185,6 @@ class MACE(torch.nn.Module):
 
         self.rigid_pair_multiplicity = rigid_pair_multiplicity
 
-=======
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
         if self.rigid_pair_mode != "none" and use_so3:
             raise ValueError(
                 "rigid_pair_mode='full_frame' currently supports the "
@@ -334,18 +328,14 @@ class MACE(torch.nn.Module):
             sh_irreps, normalize=True, normalization="component"
         )
 
-<<<<<<< HEAD
         # Effective edge irreps consumed by the MACE interaction blocks.
         # In the legacy path this is just the ordinary geometric SH basis.
         edge_attrs_irreps = sh_irreps
 
-=======
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
         if self.rigid_pair_mode == "full_frame":
             self.rigid_pair_edge_embedding = RigidPairEdgeEmbedding(
                 lmax=max_ell,
                 edge_irreps=sh_irreps,
-<<<<<<< HEAD
                 multiplicity=self.rigid_pair_multiplicity,
             )
 
@@ -457,9 +447,6 @@ class MACE(torch.nn.Module):
 
         self.edge_attrs_irreps = edge_attrs_irreps
 
-=======
-            )
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
         if radial_MLP is None:
             radial_MLP = [64, 64, 64]
         # Interactions and readout
@@ -687,21 +674,15 @@ class MACE(torch.nn.Module):
         )
         node_feats = node_feats + inertia_node_feats
         edge_attrs = self.spherical_harmonics(vectors)
-<<<<<<< HEAD
         if self.rigid_pair_mode in (
             "full_frame_compact",
             "d6_frame_compact",
         ):
             rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
-=======
-        if self.rigid_pair_mode == "full_frame":
-            edge_attrs = edge_attrs + self.rigid_pair_edge_embedding(
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
                 data["quaternions"],
                 data["edge_index"],
                 vectors,
             )
-<<<<<<< HEAD
             edge_attrs = edge_attrs + rigid_pair_edge_attrs
 
         elif self.rigid_pair_mode in ("full_frame", "full_frame_irrep_complete", "full_frame_raw", "c2_frame", "d6_frame"):
@@ -717,8 +698,6 @@ class MACE(torch.nn.Module):
                 ),
                 dim=-1,
             )
-=======
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
         edge_feats, cutoff = self.radial_embedding(
             lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
@@ -952,21 +931,15 @@ class ScaleShiftMACE(MACE):
         )
         node_feats = node_feats + inertia_node_feats
         edge_attrs = self.spherical_harmonics(vectors)
-<<<<<<< HEAD
         if self.rigid_pair_mode in (
             "full_frame_compact",
             "d6_frame_compact",
         ):
             rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
-=======
-        if self.rigid_pair_mode == "full_frame":
-            edge_attrs = edge_attrs + self.rigid_pair_edge_embedding(
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
                 data["quaternions"],
                 data["edge_index"],
                 vectors,
             )
-<<<<<<< HEAD
             edge_attrs = edge_attrs + rigid_pair_edge_attrs
 
         elif self.rigid_pair_mode in ("full_frame", "full_frame_irrep_complete", "full_frame_raw", "c2_frame", "d6_frame"):
@@ -982,8 +955,6 @@ class ScaleShiftMACE(MACE):
                 ),
                 dim=-1,
             )
-=======
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
         edge_feats, cutoff = self.radial_embedding(
             lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )

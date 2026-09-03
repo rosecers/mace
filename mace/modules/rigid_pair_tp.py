@@ -160,7 +160,6 @@ class RigidPairTensorProductFeatures(torch.nn.Module):
 
 
 class RigidPairEdgeEmbedding(torch.nn.Module):
-<<<<<<< HEAD
     """Learned compressed rigid-pair edge representation.
 
     The complete pair tensor product is projected to ``multiplicity``
@@ -170,24 +169,12 @@ class RigidPairEdgeEmbedding(torch.nn.Module):
 
     The projected rigid block is scaled by 1/sqrt(multiplicity), keeping
     its aggregate norm approximately comparable as multiplicity grows.
-=======
-    """Project complete rigid-pair TP features into standard MACE edge irreps.
-
-    The full tensor product is used as an information-rich reference
-    representation, then an equivariant Linear layer compresses it back
-    into the same irreps as the ordinary MACE spherical-harmonic edge
-    attributes.
-
-    This lets rigid orientation information enter existing MACE
-    InteractionBlocks without modifying those blocks.
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
     """
 
     def __init__(
         self,
         lmax: int,
         edge_irreps: o3.Irreps,
-<<<<<<< HEAD
         multiplicity: int = 1,
     ):
         super().__init__()
@@ -200,16 +187,10 @@ class RigidPairEdgeEmbedding(torch.nn.Module):
 
         self.multiplicity = int(multiplicity)
 
-=======
-    ):
-        super().__init__()
-
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
         self.full_pair = RigidPairTensorProductFeatures(
             lmax=lmax,
         )
 
-<<<<<<< HEAD
         self.base_edge_irreps = o3.Irreps(edge_irreps)
 
         # Increase multiplicity without changing which irreps appear.
@@ -238,13 +219,6 @@ class RigidPairEdgeEmbedding(torch.nn.Module):
 
         self.output_scale = 1.0 / math.sqrt(
             self.multiplicity
-=======
-        self.edge_irreps = o3.Irreps(edge_irreps)
-
-        self.projection = o3.Linear(
-            self.full_pair.irreps_out,
-            self.edge_irreps,
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
         )
 
     def forward(
@@ -253,17 +227,12 @@ class RigidPairEdgeEmbedding(torch.nn.Module):
         edge_index: torch.Tensor,
         edge_vectors: torch.Tensor,
     ) -> torch.Tensor:
-<<<<<<< HEAD
         full_pair = self.full_pair(
-=======
-        full_features = self.full_pair(
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
             quaternions,
             edge_index,
             edge_vectors,
         )
 
-<<<<<<< HEAD
         projected = self.projection(full_pair)
 
         return projected * self.output_scale
@@ -605,22 +574,3 @@ class RigidPairC2EdgeEmbedding(torch.nn.Module):
             x = x / self.multiplicity**0.5
 
         return x
-=======
-        return self.projection(full_features)
-
-
-def validate_rigid_pair_mode(mode: str) -> str:
-    """Validate the optional rigid-pair MACE interaction mode."""
-    valid = (
-        "none",
-        "full_frame",
-    )
-
-    if mode not in valid:
-        raise ValueError(
-            f"Unknown rigid_pair_mode={mode!r}; "
-            f"expected one of {valid}"
-        )
-
-    return mode
->>>>>>> ea9c6c0d851b7b80131e8358da044c2ee59ca53d
