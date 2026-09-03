@@ -143,7 +143,7 @@ class MACE(torch.nn.Module):
         lammps_mliap: Optional[bool] = False,
         readout_cls: Optional[Type[NonLinearReadoutBlock]] = NonLinearReadoutBlock,
         keep_last_layer_irreps: bool = False,
-        rigid_feature_mode: str = "moi",
+        rigid_feature_mode: str = "none",
         rigid_pair_mode: str = "none",
         rigid_pair_multiplicity: int = 1,
     ):
@@ -230,32 +230,37 @@ class MACE(torch.nn.Module):
             o3.Irrep(2, 1)
         )
 
-        if num_tensor_node_features == 0:
-            raise ValueError(
-                "Full inertia tensor features require 2e hidden channels. "
-                "Use --max_L=2 or explicit hidden_irreps containing 2e."
-            )
-
         species_node_feats_irreps = o3.Irreps(
             [(num_scalar_node_features, (0, 1))]
         )
-        node_feats_irreps = o3.Irreps(
-            [
-                (num_scalar_node_features, (0, 1)),
-                (num_tensor_node_features, (2, 1)),
-            ]
-        )
 
-        self.rigid_body_input_irreps = o3.Irreps("1x0e + 1x2e")
-        self.initial_scalar_dim = species_node_feats_irreps.dim
+        if self.rigid_feature_mode == "none":
+            node_feats_irreps = species_node_feats_irreps
+        else:
+            if num_tensor_node_features == 0:
+                raise ValueError(
+                    "Full inertia tensor features require 2e hidden channels. "
+                    "Use --max_L=2 or explicit hidden_irreps containing 2e."
+                )
+            node_feats_irreps = o3.Irreps(
+                [
+                    (num_scalar_node_features, (0, 1)),
+                    (num_tensor_node_features, (2, 1)),
+                ]
+            )
+
         self.node_embedding = LinearNodeEmbeddingBlock(
             irreps_in=node_attr_irreps,
             irreps_out=species_node_feats_irreps,
         )
-        self.inertia_node_embedding = o3.Linear(
-            self.rigid_body_input_irreps,
-            node_feats_irreps,
-        )
+
+        if self.rigid_feature_mode != "none":
+            self.rigid_body_input_irreps = o3.Irreps("1x0e + 1x2e")
+            self.initial_scalar_dim = species_node_feats_irreps.dim
+            self.inertia_node_embedding = o3.Linear(
+                self.rigid_body_input_irreps,
+                node_feats_irreps,
+            )
         embedding_size = node_feats_irreps.count(o3.Irrep(0, 1))
         if embedding_specs is not None:
             self.embedding_specs = embedding_specs
@@ -300,9 +305,14 @@ class MACE(torch.nn.Module):
                     )
                 )
 
-        edge_feats_irreps = o3.Irreps(
-            f"{self.radial_embedding.out_dim + 5}x0e"
-        )
+        if self.rigid_feature_mode == "none":
+            edge_feats_irreps = o3.Irreps(
+                f"{self.radial_embedding.out_dim}x0e"
+            )
+        else:
+            edge_feats_irreps = o3.Irreps(
+                f"{self.radial_embedding.out_dim + 5}x0e"
+            )
         if pair_repulsion:
             self.pair_repulsion_fn = ZBLBasis(p=num_polynomial_cutoff)
             self.pair_repulsion = True
@@ -577,16 +587,14 @@ class MACE(torch.nn.Module):
         super().__setstate__(state)
         if not hasattr(self, "rigid_pair_mode"):
             self.rigid_pair_mode = "none"
-        # Models serialized before rigid feature ablations implicitly used
-        # the complete MOI representation. Restore that behavior on load.
         if not hasattr(self, "rigid_feature_mode"):
-            self.rigid_feature_mode = "moi"
+            self.rigid_feature_mode = "none"
         if not hasattr(self, "use_rigid_scalar"):
-            self.use_rigid_scalar = True
+            self.use_rigid_scalar = False
         if not hasattr(self, "use_rigid_tensor"):
-            self.use_rigid_tensor = True
+            self.use_rigid_tensor = False
         if not hasattr(self, "use_inertia_edge_invariants"):
-            self.use_inertia_edge_invariants = True
+            self.use_inertia_edge_invariants = False
         if not hasattr(self, "rigid_irreps_key") or not hasattr(
             self,
             "rigid_tensor_key",
@@ -643,36 +651,37 @@ class MACE(torch.nn.Module):
         species_node_feats = self.node_embedding(
             data["node_attrs"]
         )
-        if self.rigid_feature_mode == "learned_rank2":
-            rigid_tensor, rigid_irreps = _learned_rank2_features(
-                data["quaternions"],
-                self.learned_rank2_body_tensor,
-            )
-            edge_invariant_tensor = rigid_tensor
+        if self.rigid_feature_mode == "none":
+            node_feats = species_node_feats
+            edge_invariant_tensor = None
         else:
-            rigid_tensor = data[self.rigid_tensor_key]
-            rigid_irreps = data[self.rigid_irreps_key]
-            # Preserve legacy behavior for fixed rank-2 modes: node features may
-            # come from the selected tensor, but edge invariants remain MOI-based.
-            edge_invariant_tensor = data["inertia_tensor"]
-        inertia_scalar = rigid_irreps[:, :1]
-        inertia_tensor_irreps = rigid_irreps[:, 1:]
-        if not self.use_rigid_scalar:
-            inertia_scalar = torch.zeros_like(inertia_scalar)
-        if not self.use_rigid_tensor:
-            inertia_tensor_irreps = torch.zeros_like(inertia_tensor_irreps)
-        inertia_node_feats = self.inertia_node_embedding(
-            torch.cat((inertia_scalar, inertia_tensor_irreps), dim=-1)
-        )
-
-        tensor_padding = torch.zeros_like(
-            inertia_node_feats[:, self.initial_scalar_dim :]
-        )
-        node_feats = torch.cat(
-            (species_node_feats, tensor_padding),
-            dim=-1,
-        )
-        node_feats = node_feats + inertia_node_feats
+            if self.rigid_feature_mode == "learned_rank2":
+                rigid_tensor, rigid_irreps = _learned_rank2_features(
+                    data["quaternions"],
+                    self.learned_rank2_body_tensor,
+                )
+                edge_invariant_tensor = rigid_tensor
+            else:
+                rigid_tensor = data[self.rigid_tensor_key]
+                rigid_irreps = data[self.rigid_irreps_key]
+                edge_invariant_tensor = data["inertia_tensor"]
+            inertia_scalar = rigid_irreps[:, :1]
+            inertia_tensor_irreps = rigid_irreps[:, 1:]
+            if not self.use_rigid_scalar:
+                inertia_scalar = torch.zeros_like(inertia_scalar)
+            if not self.use_rigid_tensor:
+                inertia_tensor_irreps = torch.zeros_like(inertia_tensor_irreps)
+            inertia_node_feats = self.inertia_node_embedding(
+                torch.cat((inertia_scalar, inertia_tensor_irreps), dim=-1)
+            )
+            tensor_padding = torch.zeros_like(
+                inertia_node_feats[:, self.initial_scalar_dim :]
+            )
+            node_feats = torch.cat(
+                (species_node_feats, tensor_padding),
+                dim=-1,
+            )
+            node_feats = node_feats + inertia_node_feats
         edge_attrs = self.spherical_harmonics(vectors)
         if self.rigid_pair_mode in (
             "full_frame_compact",
@@ -710,14 +719,15 @@ class MACE(torch.nn.Module):
                 edge_vectors=vectors,
             )
 
-        inertia_feats = inertia_edge_invariants(
-            edge_invariant_tensor,
-            data["edge_index"],
-            vectors,
-        )
-        if not self.use_inertia_edge_invariants:
-            inertia_feats = torch.zeros_like(inertia_feats)
-        edge_feats = torch.cat((edge_feats, inertia_feats), dim=-1)
+        if self.rigid_feature_mode != "none":
+            inertia_feats = inertia_edge_invariants(
+                edge_invariant_tensor,
+                data["edge_index"],
+                vectors,
+            )
+            if not self.use_inertia_edge_invariants:
+                inertia_feats = torch.zeros_like(inertia_feats)
+            edge_feats = torch.cat((edge_feats, inertia_feats), dim=-1)
         if hasattr(self, "pair_repulsion"):
             pair_node_energy = self.pair_repulsion_fn(
                 lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
@@ -900,36 +910,37 @@ class ScaleShiftMACE(MACE):
         species_node_feats = self.node_embedding(
             data["node_attrs"]
         )
-        if self.rigid_feature_mode == "learned_rank2":
-            rigid_tensor, rigid_irreps = _learned_rank2_features(
-                data["quaternions"],
-                self.learned_rank2_body_tensor,
-            )
-            edge_invariant_tensor = rigid_tensor
+        if self.rigid_feature_mode == "none":
+            node_feats = species_node_feats
+            edge_invariant_tensor = None
         else:
-            rigid_tensor = data[self.rigid_tensor_key]
-            rigid_irreps = data[self.rigid_irreps_key]
-            # Preserve legacy behavior for fixed rank-2 modes: node features may
-            # come from the selected tensor, but edge invariants remain MOI-based.
-            edge_invariant_tensor = data["inertia_tensor"]
-        inertia_scalar = rigid_irreps[:, :1]
-        inertia_tensor_irreps = rigid_irreps[:, 1:]
-        if not self.use_rigid_scalar:
-            inertia_scalar = torch.zeros_like(inertia_scalar)
-        if not self.use_rigid_tensor:
-            inertia_tensor_irreps = torch.zeros_like(inertia_tensor_irreps)
-        inertia_node_feats = self.inertia_node_embedding(
-            torch.cat((inertia_scalar, inertia_tensor_irreps), dim=-1)
-        )
-
-        tensor_padding = torch.zeros_like(
-            inertia_node_feats[:, self.initial_scalar_dim :]
-        )
-        node_feats = torch.cat(
-            (species_node_feats, tensor_padding),
-            dim=-1,
-        )
-        node_feats = node_feats + inertia_node_feats
+            if self.rigid_feature_mode == "learned_rank2":
+                rigid_tensor, rigid_irreps = _learned_rank2_features(
+                    data["quaternions"],
+                    self.learned_rank2_body_tensor,
+                )
+                edge_invariant_tensor = rigid_tensor
+            else:
+                rigid_tensor = data[self.rigid_tensor_key]
+                rigid_irreps = data[self.rigid_irreps_key]
+                edge_invariant_tensor = data["inertia_tensor"]
+            inertia_scalar = rigid_irreps[:, :1]
+            inertia_tensor_irreps = rigid_irreps[:, 1:]
+            if not self.use_rigid_scalar:
+                inertia_scalar = torch.zeros_like(inertia_scalar)
+            if not self.use_rigid_tensor:
+                inertia_tensor_irreps = torch.zeros_like(inertia_tensor_irreps)
+            inertia_node_feats = self.inertia_node_embedding(
+                torch.cat((inertia_scalar, inertia_tensor_irreps), dim=-1)
+            )
+            tensor_padding = torch.zeros_like(
+                inertia_node_feats[:, self.initial_scalar_dim :]
+            )
+            node_feats = torch.cat(
+                (species_node_feats, tensor_padding),
+                dim=-1,
+            )
+            node_feats = node_feats + inertia_node_feats
         edge_attrs = self.spherical_harmonics(vectors)
         if self.rigid_pair_mode in (
             "full_frame_compact",
@@ -967,14 +978,15 @@ class ScaleShiftMACE(MACE):
                 edge_vectors=vectors,
             )
 
-        inertia_feats = inertia_edge_invariants(
-            edge_invariant_tensor,
-            data["edge_index"],
-            vectors,
-        )
-        if not self.use_inertia_edge_invariants:
-            inertia_feats = torch.zeros_like(inertia_feats)
-        edge_feats = torch.cat((edge_feats, inertia_feats), dim=-1)
+        if self.rigid_feature_mode != "none":
+            inertia_feats = inertia_edge_invariants(
+                edge_invariant_tensor,
+                data["edge_index"],
+                vectors,
+            )
+            if not self.use_inertia_edge_invariants:
+                inertia_feats = torch.zeros_like(inertia_feats)
+            edge_feats = torch.cat((edge_feats, inertia_feats), dim=-1)
 
         if hasattr(self, "pair_repulsion"):
             pair_node_energy = self.pair_repulsion_fn(

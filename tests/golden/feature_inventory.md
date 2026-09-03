@@ -144,7 +144,7 @@ instead of a hand-written runtime raise.
 | `choice.EnergyDipolesMACE` | `--model EnergyDipolesMACE` | `mace/tools/arg_parser.py:146` | MERGE — idem, energy + dipole observables | `tests/unit/test_models.py::test_energy_dipole_mace` |
 | `choice.MagneticScaleShiftMACE` | `--model MagneticScaleShiftMACE` | `mace/tools/arg_parser.py:147` | MERGE — idem; the only magnetic entry in the choices | `tests/extensions/magnetic` + `tests/golden/test_tiny_magnetic.py::test_anchor_reproduces_its_reference` |
 
-## 3. `mace_run_train` flags — 184 dests
+## 3. `mace_run_train` flags — 187 dests
 
 One row per **dest** of `build_default_arg_parser` (`mace/tools/arg_parser.py`), which is what a
 knob is; the option strings that spell it are in the feature cell. 184 dests carry 194 option
@@ -205,6 +205,9 @@ Group default: KEEP as the `model` config section; the defaults are pinned by th
 | `train.use_reduced_cg` | `--use_reduced_cg` | `mace/tools/arg_parser.py:240` | MERGE — a CG-representation choice the backend makes, not a modelling decision a user can judge, and it changes numerics; `convert_e3nn_hybrid.py` defaults it to `True`, so checkpoints carry it and the converter must read it rather than assume | `tests/golden/test_tiny_dipoles.py::test_the_committed_anchor_carries_the_plain_e3nn_basis` (pins the plain basis; the reduced path stays unpinned) |
 | `train.use_so3` | `--use_so3` | `mace/tools/arg_parser.py:246` | DROP — a global parity-convention switch that doubles the irrep-handling surface in exactly the layer v1 rewrites; no published model sets it | — |
 | `train.use_agnostic_product` | `--use_agnostic_product` | `mace/tools/arg_parser.py:252` | KEEP — MACE-Polar S/M/L set it, so it is foundation-model architecture, not a research knob | `tests/foundations/test_foundations.py::test_polar_extract_config_roundtrip` + `tests/golden/test_polar_foundation.py::test_the_reference_pins_the_electrostatics_and_not_only_the_energy` |
+| `train.rigid_feature_mode` | `--rigid_feature_mode` | `mace/tools/arg_parser.py:261` | KEEP — selects the explicit rigid-body node representation for coarse-grained models; `none` preserves ordinary MACE | `tests/test_rigid_feature_modes.py` |
+| `train.rigid_pair_mode` | `--rigid_pair_mode` | `mace/tools/arg_parser.py:280` | KEEP — selects the rigid-body pair representation while retaining the ordinary MACE path for `none` | `tests/test_rigid_pair_tp.py` + `tests/test_rigid_c2.py` + `tests/test_rigid_d6.py` |
+| `train.rigid_pair_multiplicity` | `--rigid_pair_multiplicity` | `mace/tools/arg_parser.py:300` | KEEP — controls the multiplicity of the optional rigid pair representation | `tests/test_rigid_pair_tp.py` |
 | `train.num_interactions` | `--num_interactions` | `mace/tools/arg_parser.py:258` | KEEP | `tests/golden/test_tiny_anchors.py::test_anchor_reproduces_its_reference` |
 | `train.MLP_irreps` | `--MLP_irreps` | `mace/tools/arg_parser.py:261` | KEEP — the non-linear readout's hidden irreps | `tests/golden/test_tiny_anchors.py::test_anchor_reproduces_its_reference` |
 | `train.radial_MLP` | `--radial_MLP` | `mace/tools/arg_parser.py:267` | KEEP | `tests/unit/test_radial.py::test_radial_mlp_structure_and_shapes` |
