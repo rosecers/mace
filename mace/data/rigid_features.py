@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 import torch
 
-
 VALID_RIGID_FEATURE_MODES = (
     "none",
     "isotropic",
@@ -74,17 +73,14 @@ def validate_rigid_feature_mode(mode: str) -> str:
     if normalized not in RIGID_FEATURE_SPECS:
         valid = ", ".join(VALID_RIGID_FEATURE_MODES)
         raise ValueError(
-            f"Unknown rigid feature mode {mode!r}. "
-            f"Expected one of: {valid}."
+            f"Unknown rigid feature mode {mode!r}. " f"Expected one of: {valid}."
         )
 
     return normalized
 
 
 def rigid_feature_spec(mode: str) -> RigidFeatureSpec:
-    return RIGID_FEATURE_SPECS[
-        validate_rigid_feature_mode(mode)
-    ]
+    return RIGID_FEATURE_SPECS[validate_rigid_feature_mode(mode)]
 
 
 def select_rigid_features(
@@ -117,9 +113,7 @@ def select_rigid_features(
         )
 
     if mode == "none":
-        return inertia_irreps.new_zeros(
-            (inertia_irreps.shape[0], 0)
-        )
+        return inertia_irreps.new_zeros((inertia_irreps.shape[0], 0))
 
     if mode == "isotropic":
         return inertia_irreps[:, :1]
@@ -136,9 +130,7 @@ def select_rigid_features(
     ):
         return inertia_irreps
 
-    raise AssertionError(
-        f"Unhandled rigid feature mode: {mode}"
-    )
+    raise AssertionError(f"Unhandled rigid feature mode: {mode}")
 
 
 def mask_inertia_irreps(

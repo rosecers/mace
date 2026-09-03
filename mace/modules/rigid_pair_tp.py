@@ -19,14 +19,15 @@ stage does not introduce a learned compression of the angular information.
 """
 
 from __future__ import annotations
+
 import math
 
 import torch
 from e3nn import o3
-from mace.modules.rigid_c2 import C2_BODY_IRREPS, c2_body_irreducible_features
-from mace.modules.rigid_d6 import D6_BODY_IRREPS, d6_body_features
 
 from mace.data.rigid_body import quaternion_to_matrix
+from mace.modules.rigid_c2 import C2_BODY_IRREPS, c2_body_irreducible_features
+from mace.modules.rigid_d6 import D6_BODY_IRREPS, d6_body_features
 
 
 class RigidPairTensorProductFeatures(torch.nn.Module):
@@ -98,24 +99,17 @@ class RigidPairTensorProductFeatures(torch.nn.Module):
             ``(num_edges, irreps_out.dim)`` equivariant pair features.
         """
         if quaternions.ndim != 2 or quaternions.shape[-1] != 4:
-            raise ValueError(
-                "quaternions must have shape (num_nodes, 4)"
-            )
+            raise ValueError("quaternions must have shape (num_nodes, 4)")
 
         if edge_index.ndim != 2 or edge_index.shape[0] != 2:
-            raise ValueError(
-                "edge_index must have shape (2, num_edges)"
-            )
+            raise ValueError("edge_index must have shape (2, num_edges)")
 
         if edge_vectors.ndim != 2 or edge_vectors.shape[-1] != 3:
-            raise ValueError(
-                "edge_vectors must have shape (num_edges, 3)"
-            )
+            raise ValueError("edge_vectors must have shape (num_edges, 3)")
 
         if edge_vectors.shape[0] != edge_index.shape[1]:
             raise ValueError(
-                "edge_vectors and edge_index must contain the same "
-                "number of edges"
+                "edge_vectors and edge_index must contain the same " "number of edges"
             )
 
         distances = torch.linalg.vector_norm(
@@ -125,8 +119,7 @@ class RigidPairTensorProductFeatures(torch.nn.Module):
 
         if torch.any(distances <= 1.0e-12):
             raise ValueError(
-                "RigidPairTensorProductFeatures does not support "
-                "zero-length edges"
+                "RigidPairTensorProductFeatures does not support " "zero-length edges"
             )
 
         directions = edge_vectors / distances.unsqueeze(-1)
@@ -204,10 +197,7 @@ class RigidPairEdgeEmbedding(torch.nn.Module):
         #   4x0e + 4x1o + 4x2e + 4x3o
         #
         self.edge_irreps = o3.Irreps(
-            [
-                (mul * self.multiplicity, ir)
-                for mul, ir in self.base_edge_irreps
-            ]
+            [(mul * self.multiplicity, ir) for mul, ir in self.base_edge_irreps]
         )
 
         # Do not perturb initialization of the surrounding MACE model.
@@ -217,9 +207,7 @@ class RigidPairEdgeEmbedding(torch.nn.Module):
                 self.edge_irreps,
             )
 
-        self.output_scale = 1.0 / math.sqrt(
-            self.multiplicity
-        )
+        self.output_scale = 1.0 / math.sqrt(self.multiplicity)
 
     def forward(
         self,
@@ -278,9 +266,7 @@ class RigidPairIrrepCompleteEdgeEmbedding(torch.nn.Module):
             ),
         )
 
-        self.edge_irreps = o3.Irreps(
-            [(1, by_type[key]) for key in keys]
-        )
+        self.edge_irreps = o3.Irreps([(1, by_type[key]) for key in keys])
 
         # Do not perturb initialization of the surrounding MACE model.
         with torch.random.fork_rng(devices=[]):
@@ -343,12 +329,12 @@ def validate_rigid_pair_mode(mode: str) -> str:
         return mode
     """Validate the rigid-pair edge representation mode."""
     valid_modes = {
-        'none',
-        'full_frame',
-        'full_frame_compact',
-        'full_frame_irrep_complete',
-        'full_frame_raw',
-        'invariant_radial',
+        "none",
+        "full_frame",
+        "full_frame_compact",
+        "full_frame_irrep_complete",
+        "full_frame_raw",
+        "invariant_radial",
     }
 
     if mode not in valid_modes:
@@ -377,9 +363,7 @@ class RigidPairD6EdgeEmbedding(torch.nn.Module):
         if max_ell is None:
             raise TypeError("max_ell/lmax must be provided")
         if kwargs:
-            raise TypeError(
-                f"Unexpected keyword arguments: {sorted(kwargs)}"
-            )
+            raise TypeError(f"Unexpected keyword arguments: {sorted(kwargs)}")
         if multiplicity < 1:
             raise ValueError("multiplicity must be >= 1")
 
@@ -387,9 +371,7 @@ class RigidPairD6EdgeEmbedding(torch.nn.Module):
         self.multiplicity = int(multiplicity)
 
         if edge_irreps is None:
-            self.sh_irreps = o3.Irreps.spherical_harmonics(
-                self.max_ell
-            )
+            self.sh_irreps = o3.Irreps.spherical_harmonics(self.max_ell)
         else:
             self.sh_irreps = o3.Irreps(edge_irreps)
 
@@ -397,10 +379,7 @@ class RigidPairD6EdgeEmbedding(torch.nn.Module):
             self.sh_irreps,
             D6_BODY_IRREPS,
         )
-        allowed_irreps = [
-            ir
-            for _, ir in self.sh_irreps
-        ]
+        allowed_irreps = [ir for _, ir in self.sh_irreps]
         self.pair_tp = o3.FullTensorProduct(
             self.edge_body_tp.irreps_out,
             D6_BODY_IRREPS,
@@ -409,10 +388,7 @@ class RigidPairD6EdgeEmbedding(torch.nn.Module):
         self.irreps_in = self.pair_tp.irreps_out
 
         self.edge_irreps = o3.Irreps(
-            [
-                (mul * self.multiplicity, ir)
-                for mul, ir in self.sh_irreps
-            ]
+            [(mul * self.multiplicity, ir) for mul, ir in self.sh_irreps]
         )
         self.irreps_out = self.edge_irreps
 
@@ -477,9 +453,7 @@ class RigidPairC2EdgeEmbedding(torch.nn.Module):
             raise TypeError("max_ell/lmax must be provided")
 
         if kwargs:
-            raise TypeError(
-                f"Unexpected keyword arguments: {sorted(kwargs)}"
-            )
+            raise TypeError(f"Unexpected keyword arguments: {sorted(kwargs)}")
 
         if multiplicity < 1:
             raise ValueError("multiplicity must be >= 1")
@@ -495,15 +469,9 @@ class RigidPairC2EdgeEmbedding(torch.nn.Module):
         # basis passed by models.py.  Keep it separate from the
         # projected rigid-pair output irreps.
         if edge_irreps is None:
-            self.sh_irreps = (
-                o3.Irreps.spherical_harmonics(
-                    self.max_ell
-                )
-            )
+            self.sh_irreps = o3.Irreps.spherical_harmonics(self.max_ell)
         else:
-            self.sh_irreps = o3.Irreps(
-                edge_irreps
-            )
+            self.sh_irreps = o3.Irreps(edge_irreps)
 
         self.edge_body_tp = o3.FullTensorProduct(
             self.sh_irreps,
@@ -518,10 +486,7 @@ class RigidPairC2EdgeEmbedding(torch.nn.Module):
         self.irreps_in = self.pair_tp.irreps_out
 
         self.edge_irreps = o3.Irreps(
-            [
-                (mul * self.multiplicity, ir)
-                for mul, ir in self.sh_irreps
-            ]
+            [(mul * self.multiplicity, ir) for mul, ir in self.sh_irreps]
         )
 
         self.irreps_out = self.edge_irreps
@@ -539,9 +504,7 @@ class RigidPairC2EdgeEmbedding(torch.nn.Module):
         edge_index,
         edge_vectors,
     ):
-        rotations = quaternion_to_matrix(
-            quaternions
-        )
+        rotations = quaternion_to_matrix(quaternions)
 
         body = c2_body_irreducible_features(
             rotations,

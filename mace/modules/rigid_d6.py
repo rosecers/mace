@@ -7,7 +7,6 @@ from e3nn import o3
 
 from mace.data.rigid_body import quaternion_to_matrix
 
-
 D6_BODY_IRREPS = o3.Irreps("1x2e + 1x6e")
 
 
@@ -38,9 +37,7 @@ def d6_body_features_from_matrix(
     rotation: torch.Tensor,
 ) -> torch.Tensor:
     if rotation.shape[-2:] != (3, 3):
-        raise ValueError(
-            "rotation must have shape (..., 3, 3)"
-        )
+        raise ValueError("rotation must have shape (..., 3, 3)")
 
     normal = rotation[..., :, 2]
 

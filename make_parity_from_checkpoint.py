@@ -1,5 +1,5 @@
-from pathlib import Path
 import inspect
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,13 +13,10 @@ from mace.modules.blocks import interaction_classes
 from mace.modules.models import ScaleShiftMACE
 from mace.tools import AtomicNumberTable
 
-
 # -----------------------------
 # User settings
 # -----------------------------
-CHECKPOINT = Path(
-    "checkpoints/energyfit_moi_128_ew100_fw1_seed29_run-29_epoch-23.pt"
-)
+CHECKPOINT = Path("checkpoints/energyfit_moi_128_ew100_fw1_seed29_run-29_epoch-23.pt")
 DATA_FILE = Path("publication_splits/random_test.xyz")
 OUTPUT_PREFIX = Path("energy_overfit/parity/energyfit_moi_128_ew100_fw1_seed29_test")
 DEVICE = "cpu"
@@ -147,11 +144,7 @@ frames = read(DATA_FILE, index=":")
 print(f"Loaded {len(frames)} frames")
 
 all_atomic_numbers = sorted(
-    {
-        int(z)
-        for atoms in frames
-        for z in atoms.get_atomic_numbers().tolist()
-    }
+    {int(z) for atoms in frames for z in atoms.get_atomic_numbers().tolist()}
 )
 z_table = AtomicNumberTable(all_atomic_numbers)
 print("Atomic number table:", z_table.zs)

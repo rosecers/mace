@@ -14,6 +14,7 @@ import numpy as np
 import torch
 from e3nn import o3
 from tqdm.auto import tqdm
+
 from mace import data
 from mace.calculators.mace import get_model_dtype
 from mace.cli.convert_e3nn_cueq import run as run_e3nn_to_cueq

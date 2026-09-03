@@ -3,6 +3,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from ase.io import read
+
 from mace.calculators import MACECalculator
 
 MODEL = Path("checkpoints/inertia_full_tensor_overfit64_run-17.model")

@@ -20,17 +20,9 @@ from mace.tools import (
 )
 
 from .neighborhood import get_neighborhood
+
 if TYPE_CHECKING:
     from .utils import Configuration
-    
-from .rigid_body import (
-    cartesian_tensor_to_irreps,
-    ellipsoid_gyration_tensor,
-    ellipsoid_inertia_tensor,
-    principal_tensor_from_values,
-    quadrupole_tensor_to_irreps,
-    steric_extent_tensor,
-)
 
 from .rigid_body import (
     cartesian_tensor_to_irreps,
@@ -40,6 +32,7 @@ from .rigid_body import (
     quadrupole_tensor_to_irreps,
     steric_extent_tensor,
 )
+
 
 class AtomicData(torch_geometric.data.Data):
     num_graphs: torch.Tensor

@@ -70,24 +70,17 @@ def rigid_pair_geometry(
             ``R_i^T R_j``, shape ``(num_edges, 3, 3)``.
     """
     if quaternions.ndim != 2 or quaternions.shape[-1] != 4:
-        raise ValueError(
-            "quaternions must have shape (num_nodes, 4)"
-        )
+        raise ValueError("quaternions must have shape (num_nodes, 4)")
 
     if edge_index.ndim != 2 or edge_index.shape[0] != 2:
-        raise ValueError(
-            "edge_index must have shape (2, num_edges)"
-        )
+        raise ValueError("edge_index must have shape (2, num_edges)")
 
     if edge_vectors.ndim != 2 or edge_vectors.shape[-1] != 3:
-        raise ValueError(
-            "edge_vectors must have shape (num_edges, 3)"
-        )
+        raise ValueError("edge_vectors must have shape (num_edges, 3)")
 
     if edge_vectors.shape[0] != edge_index.shape[1]:
         raise ValueError(
-            "edge_vectors and edge_index must contain the same "
-            "number of edges"
+            "edge_vectors and edge_index must contain the same " "number of edges"
         )
 
     rotations = quaternion_to_matrix(quaternions)
@@ -104,9 +97,7 @@ def rigid_pair_geometry(
     )
 
     if torch.any(distance <= eps):
-        raise ValueError(
-            "rigid_pair_geometry does not support zero-length edges"
-        )
+        raise ValueError("rigid_pair_geometry does not support zero-length edges")
 
     space_direction = edge_vectors / distance.unsqueeze(-1)
 
@@ -181,9 +172,7 @@ def rigid_pair_harmonics(
     wigner_D: List[torch.Tensor] = []
     for ell in range(jmax + 1):
         irrep = o3.Irrep(ell, 1)
-        wigner_D.append(
-            irrep.D_from_matrix(relative_rotation)
-        )
+        wigner_D.append(irrep.D_from_matrix(relative_rotation))
 
     return {
         "body_i_harmonics": body_i_harmonics,

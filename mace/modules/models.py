@@ -11,8 +11,23 @@ import torch
 from e3nn import o3
 from e3nn.util.jit import compile_mode
 
+from mace.data.rigid_body import (
+    cartesian_tensor_to_irreps,
+    inertia_edge_invariants,
+    quaternion_to_matrix,
+)
+from mace.data.rigid_features import validate_rigid_feature_mode
 from mace.modules.embeddings import GenericJointEmbedding
 from mace.modules.radial import ZBLBasis
+from mace.modules.rigid_pair_invariant import RigidPairInvariantRadialConditioning
+from mace.modules.rigid_pair_tp import (
+    RigidPairC2EdgeEmbedding,
+    RigidPairD6EdgeEmbedding,
+    RigidPairEdgeEmbedding,
+    RigidPairIrrepCompleteEdgeEmbedding,
+    RigidPairRawEdgeEmbedding,
+    validate_rigid_pair_mode,
+)
 from mace.tools.scatter import scatter_mean, scatter_sum
 from mace.tools.torch_tools import get_change_of_basis, spherical_to_cartesian
 
@@ -30,22 +45,6 @@ from .blocks import (
     RadialEmbeddingBlock,
     ScaleShiftBlock,
 )
-from mace.data.rigid_body import (
-    cartesian_tensor_to_irreps,
-    inertia_edge_invariants,
-    quaternion_to_matrix,
-)
-from mace.data.rigid_features import validate_rigid_feature_mode
-from mace.modules.rigid_pair_invariant import RigidPairInvariantRadialConditioning
-from mace.modules.rigid_pair_tp import RigidPairIrrepCompleteEdgeEmbedding
-from mace.modules.rigid_pair_tp import RigidPairRawEdgeEmbedding
-from mace.modules.rigid_pair_tp import (
-    RigidPairEdgeEmbedding,
-    RigidPairC2EdgeEmbedding,
-    RigidPairD6EdgeEmbedding,
-    validate_rigid_pair_mode,
-)
-
 from .utils import (
     compute_dielectric_gradients,
     compute_fixed_charge_dipole,
@@ -223,16 +222,10 @@ class MACE(torch.nn.Module):
 
         # Embedding
         node_attr_irreps = o3.Irreps([(num_elements, (0, 1))])
-        num_scalar_node_features = hidden_irreps.count(
-            o3.Irrep(0, 1)
-        )
-        num_tensor_node_features = hidden_irreps.count(
-            o3.Irrep(2, 1)
-        )
+        num_scalar_node_features = hidden_irreps.count(o3.Irrep(0, 1))
+        num_tensor_node_features = hidden_irreps.count(o3.Irrep(2, 1))
 
-        species_node_feats_irreps = o3.Irreps(
-            [(num_scalar_node_features, (0, 1))]
-        )
+        species_node_feats_irreps = o3.Irreps([(num_scalar_node_features, (0, 1))])
 
         if self.rigid_feature_mode == "none":
             node_feats_irreps = species_node_feats_irreps
@@ -306,13 +299,9 @@ class MACE(torch.nn.Module):
                 )
 
         if self.rigid_feature_mode == "none":
-            edge_feats_irreps = o3.Irreps(
-                f"{self.radial_embedding.out_dim}x0e"
-            )
+            edge_feats_irreps = o3.Irreps(f"{self.radial_embedding.out_dim}x0e")
         else:
-            edge_feats_irreps = o3.Irreps(
-                f"{self.radial_embedding.out_dim + 5}x0e"
-            )
+            edge_feats_irreps = o3.Irreps(f"{self.radial_embedding.out_dim + 5}x0e")
         if pair_repulsion:
             self.pair_repulsion_fn = ZBLBasis(p=num_polynomial_cutoff)
             self.pair_repulsion = True
@@ -354,10 +343,7 @@ class MACE(torch.nn.Module):
             #
             # Forward layout:
             #   [ordinary SH | rigid-pair SH]
-            edge_attrs_irreps = (
-                sh_irreps
-                + self.rigid_pair_edge_embedding.edge_irreps
-            )
+            edge_attrs_irreps = sh_irreps + self.rigid_pair_edge_embedding.edge_irreps
 
         elif self.rigid_pair_mode == "full_frame_compact":
             # Compact residual rigid-pair pathway.
@@ -406,10 +392,7 @@ class MACE(torch.nn.Module):
             #
             # Forward layout:
             #   [ordinary SH | rigid-pair SH]
-            edge_attrs_irreps = (
-                sh_irreps
-                + self.rigid_pair_edge_embedding.edge_irreps
-            )
+            edge_attrs_irreps = sh_irreps + self.rigid_pair_edge_embedding.edge_irreps
 
         elif self.rigid_pair_mode == "c2_frame":
             self.rigid_pair_edge_embedding = RigidPairC2EdgeEmbedding(
@@ -423,22 +406,14 @@ class MACE(torch.nn.Module):
             #
             # Forward layout:
             #   [ordinary SH | rigid-pair SH]
-            edge_attrs_irreps = (
-                sh_irreps
-                + self.rigid_pair_edge_embedding.edge_irreps
-            )
+            edge_attrs_irreps = sh_irreps + self.rigid_pair_edge_embedding.edge_irreps
 
         elif self.rigid_pair_mode == "full_frame_irrep_complete":
-            self.rigid_pair_edge_embedding = (
-                RigidPairIrrepCompleteEdgeEmbedding(
-                    lmax=max_ell,
-                )
+            self.rigid_pair_edge_embedding = RigidPairIrrepCompleteEdgeEmbedding(
+                lmax=max_ell,
             )
 
-            edge_attrs_irreps = (
-                sh_irreps
-                + self.rigid_pair_edge_embedding.edge_irreps
-            )
+            edge_attrs_irreps = sh_irreps + self.rigid_pair_edge_embedding.edge_irreps
 
         elif self.rigid_pair_mode == "full_frame_raw":
             # Diagnostic upper bound: retain the complete
@@ -450,10 +425,7 @@ class MACE(torch.nn.Module):
                 lmax=max_ell,
             )
 
-            edge_attrs_irreps = (
-                sh_irreps
-                + self.rigid_pair_edge_embedding.edge_irreps
-            )
+            edge_attrs_irreps = sh_irreps + self.rigid_pair_edge_embedding.edge_irreps
 
         self.edge_attrs_irreps = edge_attrs_irreps
 
@@ -648,9 +620,7 @@ class MACE(torch.nn.Module):
             vectors.dtype
         )  # [n_graphs, n_heads]
         # Embeddings
-        species_node_feats = self.node_embedding(
-            data["node_attrs"]
-        )
+        species_node_feats = self.node_embedding(data["node_attrs"])
         if self.rigid_feature_mode == "none":
             node_feats = species_node_feats
             edge_invariant_tensor = None
@@ -694,7 +664,13 @@ class MACE(torch.nn.Module):
             )
             edge_attrs = edge_attrs + rigid_pair_edge_attrs
 
-        elif self.rigid_pair_mode in ("full_frame", "full_frame_irrep_complete", "full_frame_raw", "c2_frame", "d6_frame"):
+        elif self.rigid_pair_mode in (
+            "full_frame",
+            "full_frame_irrep_complete",
+            "full_frame_raw",
+            "c2_frame",
+            "d6_frame",
+        ):
             rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
                 data["quaternions"],
                 data["edge_index"],
@@ -907,9 +883,7 @@ class ScaleShiftMACE(MACE):
         )  # [n_graphs, num_heads]
 
         # Embeddings
-        species_node_feats = self.node_embedding(
-            data["node_attrs"]
-        )
+        species_node_feats = self.node_embedding(data["node_attrs"])
         if self.rigid_feature_mode == "none":
             node_feats = species_node_feats
             edge_invariant_tensor = None
@@ -953,7 +927,13 @@ class ScaleShiftMACE(MACE):
             )
             edge_attrs = edge_attrs + rigid_pair_edge_attrs
 
-        elif self.rigid_pair_mode in ("full_frame", "full_frame_irrep_complete", "full_frame_raw", "c2_frame", "d6_frame"):
+        elif self.rigid_pair_mode in (
+            "full_frame",
+            "full_frame_irrep_complete",
+            "full_frame_raw",
+            "c2_frame",
+            "d6_frame",
+        ):
             rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
                 data["quaternions"],
                 data["edge_index"],

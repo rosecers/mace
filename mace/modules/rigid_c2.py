@@ -30,16 +30,12 @@ import math
 import torch
 from e3nn import o3
 
-
 C2_BODY_IRREPS = o3.Irreps("1o + 2e")
 
 
 def _validate_c2_axis(c2_axis: int) -> None:
     if c2_axis not in (0, 1, 2):
-        raise ValueError(
-            "c2_axis must be one of 0, 1, or 2; "
-            f"got {c2_axis}"
-        )
+        raise ValueError("c2_axis must be one of 0, 1, or 2; " f"got {c2_axis}")
 
 
 def c2_body_irreducible_features(
@@ -70,11 +66,7 @@ def c2_body_irreducible_features(
             f"got {tuple(rotation_matrices.shape)}"
         )
 
-    transverse = [
-        i
-        for i in range(3)
-        if i != c2_axis
-    ]
+    transverse = [i for i in range(3) if i != c2_axis]
 
     a = rotation_matrices[..., :, c2_axis]
     b = rotation_matrices[..., :, transverse[0]]
@@ -94,9 +86,7 @@ def c2_body_irreducible_features(
         normalization="component",
     )
 
-    transverse_quadrupole = (
-        y2_b - y2_c
-    ) / math.sqrt(2.0)
+    transverse_quadrupole = (y2_b - y2_c) / math.sqrt(2.0)
 
     return torch.cat(
         (

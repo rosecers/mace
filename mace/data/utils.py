@@ -212,9 +212,7 @@ def config_from_atoms(
     #   c_diameter[2]:R:1
     #   c_diameter[3]:R:1
     if "quaternions" in atoms.arrays:
-        properties["quaternions"] = np.asarray(
-            atoms.arrays["quaternions"]
-        )
+        properties["quaternions"] = np.asarray(atoms.arrays["quaternions"])
         property_weights["quaternions"] = 0.0
 
     diameter_name_sets = (
@@ -245,10 +243,7 @@ def config_from_atoms(
 
     if all(key in atoms.arrays for key in diameter_keys):
         properties["diameters"] = np.column_stack(
-            [
-                np.asarray(atoms.arrays[key]).reshape(-1)
-                for key in diameter_keys
-            ]
+            [np.asarray(atoms.arrays[key]).reshape(-1) for key in diameter_keys]
         )
         property_weights["diameters"] = 0.0
     elif "c_diameter" in atoms.arrays:
@@ -266,12 +261,20 @@ def config_from_atoms(
         "steric_extent_principal": (
             ("c_steric_extent1", "c_steric_extent2", "c_steric_extent3"),
             ("c_steric_extent[1]", "c_steric_extent[2]", "c_steric_extent[3]"),
-            ("steric_extent_principal1", "steric_extent_principal2", "steric_extent_principal3"),
+            (
+                "steric_extent_principal1",
+                "steric_extent_principal2",
+                "steric_extent_principal3",
+            ),
         ),
         "electrostatic_quadrupole_principal": (
             ("c_quadrupole1", "c_quadrupole2", "c_quadrupole3"),
             ("c_quadrupole[1]", "c_quadrupole[2]", "c_quadrupole[3]"),
-            ("electrostatic_quadrupole1", "electrostatic_quadrupole2", "electrostatic_quadrupole3"),
+            (
+                "electrostatic_quadrupole1",
+                "electrostatic_quadrupole2",
+                "electrostatic_quadrupole3",
+            ),
         ),
     }
 

@@ -1,9 +1,10 @@
-from pathlib import Path
 import argparse
+from pathlib import Path
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from ase.io import read
+
 from mace.calculators import MACECalculator
 
 parser = argparse.ArgumentParser()
@@ -66,10 +67,12 @@ e_rmse = np.sqrt(np.mean(e_err**2))
 f_mae = np.mean(np.abs(f_err))
 f_rmse = np.sqrt(np.mean(f_err**2))
 
+
 def r2_score(y_true, y_pred):
     ss_res = np.sum((y_pred - y_true) ** 2)
     ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
     return 1.0 - ss_res / ss_tot if ss_tot > 0 else np.nan
+
 
 e_r2 = r2_score(e_ref, e_pred)
 f_r2 = r2_score(f_ref, f_pred)

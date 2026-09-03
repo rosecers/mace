@@ -3,8 +3,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from ase.io import read
-from mace.calculators import MACECalculator
 
+from mace.calculators import MACECalculator
 
 MODEL = Path("checkpoints/quick_inertia_run-17.model")
 TEST = Path("test.xyz")
@@ -30,17 +30,13 @@ for i, atoms in enumerate(frames):
         raise RuntimeError(f"Frame {i} has no reference ASE calculator")
 
     energy_ref.append(float(atoms.get_potential_energy()))
-    force_ref.extend(
-        np.asarray(atoms.get_forces(), dtype=float).reshape(-1)
-    )
+    force_ref.extend(np.asarray(atoms.get_forces(), dtype=float).reshape(-1))
 
     predicted = atoms.copy()
     predicted.calc = calc
 
     energy_pred.append(float(predicted.get_potential_energy()))
-    force_pred.extend(
-        np.asarray(predicted.get_forces(), dtype=float).reshape(-1)
-    )
+    force_pred.extend(np.asarray(predicted.get_forces(), dtype=float).reshape(-1))
 
 energy_ref = np.asarray(energy_ref)
 energy_pred = np.asarray(energy_pred)
@@ -54,15 +50,9 @@ def metrics(reference, prediction):
     mae = np.mean(np.abs(error))
     rmse = np.sqrt(np.mean(error**2))
 
-    denominator = np.sum(
-        (reference - np.mean(reference)) ** 2
-    )
+    denominator = np.sum((reference - np.mean(reference)) ** 2)
 
-    r2 = (
-        1.0 - np.sum(error**2) / denominator
-        if denominator > 0.0
-        else float("nan")
-    )
+    r2 = 1.0 - np.sum(error**2) / denominator if denominator > 0.0 else float("nan")
 
     return mae, rmse, r2
 
@@ -98,11 +88,7 @@ def parity_plot(reference, prediction, title, label, filename):
     ax.text(
         0.05,
         0.95,
-        (
-            f"MAE = {mae:.6g}\n"
-            f"RMSE = {rmse:.6g}\n"
-            f"R² = {r2:.6g}"
-        ),
+        (f"MAE = {mae:.6g}\n" f"RMSE = {rmse:.6g}\n" f"R² = {r2:.6g}"),
         transform=ax.transAxes,
         va="top",
     )

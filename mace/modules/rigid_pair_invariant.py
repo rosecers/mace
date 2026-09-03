@@ -122,19 +122,13 @@ class RigidPairInvariantRadialConditioning(torch.nn.Module):
         super().__init__()
 
         if radial_dim < 1:
-            raise ValueError(
-                f"radial_dim must be positive, got {radial_dim}"
-            )
+            raise ValueError(f"radial_dim must be positive, got {radial_dim}")
 
         if hidden_dim < 1:
-            raise ValueError(
-                f"hidden_dim must be positive, got {hidden_dim}"
-            )
+            raise ValueError(f"hidden_dim must be positive, got {hidden_dim}")
 
         if r_max <= 0.0:
-            raise ValueError(
-                f"r_max must be positive, got {r_max}"
-            )
+            raise ValueError(f"r_max must be positive, got {r_max}")
 
         self.radial_dim = int(radial_dim)
         self.r_max = float(r_max)
@@ -273,14 +267,10 @@ class RigidPairInvariantEnergyHead(torch.nn.Module):
         super().__init__()
 
         if r_max <= 0.0:
-            raise ValueError(
-                f"r_max must be positive, got {r_max}"
-            )
+            raise ValueError(f"r_max must be positive, got {r_max}")
 
         if hidden_dim < 1:
-            raise ValueError(
-                f"hidden_dim must be positive, got {hidden_dim}"
-            )
+            raise ValueError(f"hidden_dim must be positive, got {hidden_dim}")
 
         self.r_max = float(r_max)
 
@@ -320,19 +310,10 @@ class RigidPairInvariantEnergyHead(torch.nn.Module):
             edge_vectors=edge_vectors,
         )
 
-        reverse = reverse_rigid_pair_invariant(
-            invariant
-        )
+        reverse = reverse_rigid_pair_invariant(invariant)
 
-        forward_energy = self.net(
-            self._normalize(invariant)
-        )
+        forward_energy = self.net(self._normalize(invariant))
 
-        reverse_energy = self.net(
-            self._normalize(reverse)
-        )
+        reverse_energy = self.net(self._normalize(reverse))
 
-        return 0.5 * (
-            forward_energy
-            + reverse_energy
-        )
+        return 0.5 * (forward_energy + reverse_energy)
