@@ -72,41 +72,10 @@ def _rigid_feature_data_keys(mode: str) -> tuple[str, str]:
     return "inertia_irreps", "inertia_tensor"
 
 
-def _symmetric_tensor_from_six(values: torch.Tensor) -> torch.Tensor:
-    """Convert [..., 6] values [xx, yy, zz, xy, xz, yz] to [..., 3, 3]."""
-    tensor = values.new_zeros(*values.shape[:-1], 3, 3)
-    tensor[..., 0, 0] = values[..., 0]
-    tensor[..., 1, 1] = values[..., 1]
-    tensor[..., 2, 2] = values[..., 2]
-    tensor[..., 0, 1] = values[..., 3]
-    tensor[..., 1, 0] = values[..., 3]
-    tensor[..., 0, 2] = values[..., 4]
-    tensor[..., 2, 0] = values[..., 4]
-    tensor[..., 1, 2] = values[..., 5]
-    tensor[..., 2, 1] = values[..., 5]
-    return tensor
-
-
-def _learned_rank2_features(
-    quaternions: torch.Tensor,
-    body_tensor_values: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Build space-frame tensor and 1x0e+1x2e irreps from a learned body tensor."""
-    values = body_tensor_values.to(
-        dtype=quaternions.dtype,
-        device=quaternions.device,
-    )
-    body_tensor = _symmetric_tensor_from_six(values).expand(
-        quaternions.shape[0], -1, -1
-    )
-    rotation = quaternion_to_matrix(quaternions)
-    space_tensor = rotation @ body_tensor @ rotation.transpose(-1, -2)
-    irreps = cartesian_tensor_to_irreps(space_tensor)
-    return space_tensor, irreps
-
-
 @compile_mode("script")
 class MACE(torch.nn.Module):
+    __constants__ = ["rigid_feature_mode", "rigid_pair_mode", "use_rigid_features"]
+
     def __init__(
         self,
         r_max: float,
@@ -171,6 +140,7 @@ class MACE(torch.nn.Module):
         self.use_last_readout_only = use_last_readout_only
         self.use_edge_irreps_first = use_edge_irreps_first
         self.rigid_feature_mode = validate_rigid_feature_mode(rigid_feature_mode)
+        self.use_rigid_features = self.rigid_feature_mode != "none"
         self.rigid_pair_mode = validate_rigid_pair_mode(rigid_pair_mode)
 
         if (
@@ -197,7 +167,6 @@ class MACE(torch.nn.Module):
             "gyration",
             "steric_extent",
             "electrostatic_quadrupole",
-            "learned_rank2",
         )
         self.use_rigid_tensor = self.rigid_feature_mode in (
             "traceless_moi",
@@ -205,22 +174,11 @@ class MACE(torch.nn.Module):
             "gyration",
             "steric_extent",
             "electrostatic_quadrupole",
-            "learned_rank2",
         )
         self.use_inertia_edge_invariants = self.use_rigid_tensor
         self.rigid_irreps_key, self.rigid_tensor_key = _rigid_feature_data_keys(
             self.rigid_feature_mode
         )
-        if self.rigid_feature_mode == "learned_rank2":
-            # One full symmetric body-frame rank-2 tensor shared by all CG nodes.
-            # Parameter order: [xx, yy, zz, xy, xz, yz].
-            self.learned_rank2_body_tensor = torch.nn.Parameter(
-                torch.tensor(
-                    [[1.0, 0.8, 0.6, 0.05, -0.03, 0.02]],
-                    dtype=torch.get_default_dtype(),
-                )
-            )
-
         # Embedding
         node_attr_irreps = o3.Irreps([(num_elements, (0, 1))])
         num_scalar_node_features = hidden_irreps.count(o3.Irrep(0, 1))
@@ -228,7 +186,7 @@ class MACE(torch.nn.Module):
 
         species_node_feats_irreps = o3.Irreps([(num_scalar_node_features, (0, 1))])
 
-        if self.rigid_feature_mode == "none":
+        if not self.use_rigid_features:
             node_feats_irreps = species_node_feats_irreps
         else:
             if num_tensor_node_features == 0:
@@ -248,7 +206,7 @@ class MACE(torch.nn.Module):
             irreps_out=species_node_feats_irreps,
         )
 
-        if self.rigid_feature_mode != "none":
+        if self.use_rigid_features:
             self.rigid_body_input_irreps = o3.Irreps("1x0e + 1x2e")
             self.initial_scalar_dim = species_node_feats_irreps.dim
             self.inertia_node_embedding = o3.Linear(
@@ -299,7 +257,7 @@ class MACE(torch.nn.Module):
                     )
                 )
 
-        if self.rigid_feature_mode == "none":
+        if not self.use_rigid_features:
             edge_feats_irreps = o3.Irreps(f"{self.radial_embedding.out_dim}x0e")
         else:
             edge_feats_irreps = o3.Irreps(f"{self.radial_embedding.out_dim + 5}x0e")
@@ -562,6 +520,8 @@ class MACE(torch.nn.Module):
             self.rigid_pair_mode = "none"
         if not hasattr(self, "rigid_feature_mode"):
             self.rigid_feature_mode = "none"
+        if not hasattr(self, "use_rigid_features"):
+            self.use_rigid_features = self.rigid_feature_mode != "none"
         if not hasattr(self, "use_rigid_scalar"):
             self.use_rigid_scalar = False
         if not hasattr(self, "use_rigid_tensor"):
@@ -622,20 +582,13 @@ class MACE(torch.nn.Module):
         )  # [n_graphs, n_heads]
         # Embeddings
         species_node_feats = self.node_embedding(data["node_attrs"])
-        if self.rigid_feature_mode == "none":
+        if not self.use_rigid_features:
             node_feats = species_node_feats
             edge_invariant_tensor = None
         else:
-            if self.rigid_feature_mode == "learned_rank2":
-                rigid_tensor, rigid_irreps = _learned_rank2_features(
-                    data["quaternions"],
-                    self.learned_rank2_body_tensor,
-                )
-                edge_invariant_tensor = rigid_tensor
-            else:
-                rigid_tensor = data[self.rigid_tensor_key]
-                rigid_irreps = data[self.rigid_irreps_key]
-                edge_invariant_tensor = data["inertia_tensor"]
+            rigid_tensor = data[self.rigid_tensor_key]
+            rigid_irreps = data[self.rigid_irreps_key]
+            edge_invariant_tensor = data["inertia_tensor"]
             inertia_scalar = rigid_irreps[:, :1]
             inertia_tensor_irreps = rigid_irreps[:, 1:]
             if not self.use_rigid_scalar:
@@ -696,7 +649,7 @@ class MACE(torch.nn.Module):
                 edge_vectors=vectors,
             )
 
-        if self.rigid_feature_mode != "none":
+        if self.use_rigid_features:
             inertia_feats = inertia_edge_invariants(
                 edge_invariant_tensor,
                 data["edge_index"],
@@ -826,6 +779,8 @@ class MACE(torch.nn.Module):
 
 @compile_mode("script")
 class ScaleShiftMACE(MACE):
+    __constants__ = ["rigid_feature_mode", "rigid_pair_mode", "use_rigid_features"]
+
     def __init__(
         self,
         atomic_inter_scale: float,
@@ -885,20 +840,13 @@ class ScaleShiftMACE(MACE):
 
         # Embeddings
         species_node_feats = self.node_embedding(data["node_attrs"])
-        if self.rigid_feature_mode == "none":
+        if not self.use_rigid_features:
             node_feats = species_node_feats
             edge_invariant_tensor = None
         else:
-            if self.rigid_feature_mode == "learned_rank2":
-                rigid_tensor, rigid_irreps = _learned_rank2_features(
-                    data["quaternions"],
-                    self.learned_rank2_body_tensor,
-                )
-                edge_invariant_tensor = rigid_tensor
-            else:
-                rigid_tensor = data[self.rigid_tensor_key]
-                rigid_irreps = data[self.rigid_irreps_key]
-                edge_invariant_tensor = data["inertia_tensor"]
+            rigid_tensor = data[self.rigid_tensor_key]
+            rigid_irreps = data[self.rigid_irreps_key]
+            edge_invariant_tensor = data["inertia_tensor"]
             inertia_scalar = rigid_irreps[:, :1]
             inertia_tensor_irreps = rigid_irreps[:, 1:]
             if not self.use_rigid_scalar:
@@ -959,7 +907,7 @@ class ScaleShiftMACE(MACE):
                 edge_vectors=vectors,
             )
 
-        if self.rigid_feature_mode != "none":
+        if self.use_rigid_features:
             inertia_feats = inertia_edge_invariants(
                 edge_invariant_tensor,
                 data["edge_index"],

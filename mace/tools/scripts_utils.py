@@ -1066,16 +1066,6 @@ def get_params_options(
             + "\n".join(unregistered_parameter_names)
         )
 
-    if hasattr(model, "learned_rank2_body_tensor"):
-        param_options["params"].append(
-            {
-                "name": "learned_rank2",
-                "params": [model.learned_rank2_body_tensor],
-                "weight_decay": 0.0,
-                "lr": args.lr,
-            }
-        )
-
     # BEGIN rigid-pair optimizer registration
     # Trainable rigid-pair modules are outside the standard
     # node/interactions/products/readouts hierarchy. Register them
