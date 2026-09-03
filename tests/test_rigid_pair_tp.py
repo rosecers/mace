@@ -406,3 +406,169 @@ def test_output_contains_scalar_channels():
     )
 
     assert scalar_multiplicity > 0
+
+
+
+def test_raw_edge_embedding_is_uncompressed():
+    from mace.modules.rigid_pair_tp import RigidPairRawEdgeEmbedding
+
+    embedding = RigidPairRawEdgeEmbedding(lmax=3)
+
+    assert embedding.edge_irreps == embedding.full_pair.irreps_out
+
+    # SH(l <= 3) dimension = 16.
+    # Each molecular-frame representation has dimension 9.
+    assert embedding.edge_irreps.dim == 16 * 9 * 9
+    assert embedding.edge_irreps.dim == 1296
+
+
+def test_raw_edge_embedding_is_exact_full_pair_output():
+    from mace.modules.rigid_pair_tp import RigidPairRawEdgeEmbedding
+
+    dtype = torch.float64
+
+    embedding = RigidPairRawEdgeEmbedding(
+        lmax=2
+    ).to(dtype=dtype)
+
+    quaternions = torch.tensor(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+        ],
+        dtype=dtype,
+    )
+
+    edge_index = torch.tensor(
+        [
+            [0, 1],
+            [1, 0],
+        ],
+        dtype=torch.long,
+    )
+
+    edge_vectors = torch.tensor(
+        [
+            [1.2, -0.4, 0.7],
+            [-1.2, 0.4, -0.7],
+        ],
+        dtype=dtype,
+    )
+
+    raw = embedding(
+        quaternions,
+        edge_index,
+        edge_vectors,
+    )
+
+    reference = embedding.full_pair(
+        quaternions,
+        edge_index,
+        edge_vectors,
+    )
+
+    torch.testing.assert_close(
+        raw,
+        reference,
+        atol=0.0,
+        rtol=0.0,
+    )
+
+    # lmax=2 gives 9 SH components.
+    assert raw.shape == (2, 9 * 9 * 9)
+
+
+def test_validate_full_frame_raw_mode():
+    from mace.modules.rigid_pair_tp import validate_rigid_pair_mode
+
+    assert (
+        validate_rigid_pair_mode("full_frame_raw")
+        == "full_frame_raw"
+    )
+
+
+
+def test_projected_pair_multiplicity_expands_irreps():
+    import math
+
+    from e3nn import o3
+
+    from mace.modules.rigid_pair_tp import RigidPairEdgeEmbedding
+
+    base = o3.Irreps.spherical_harmonics(3)
+
+    m1 = RigidPairEdgeEmbedding(
+        lmax=3,
+        edge_irreps=base,
+        multiplicity=1,
+    )
+
+    m4 = RigidPairEdgeEmbedding(
+        lmax=3,
+        edge_irreps=base,
+        multiplicity=4,
+    )
+
+    assert m1.edge_irreps == base
+    assert m1.edge_irreps.dim == 16
+
+    expected_m4 = o3.Irreps(
+        [(4 * mul, ir) for mul, ir in base]
+    )
+
+    assert m4.edge_irreps == expected_m4
+    assert m4.edge_irreps.dim == 4 * base.dim
+    assert m4.edge_irreps.dim == 64
+
+    assert math.isclose(
+        m1.output_scale,
+        1.0,
+        rel_tol=0.0,
+        abs_tol=0.0,
+    )
+
+    assert math.isclose(
+        m4.output_scale,
+        0.5,
+        rel_tol=1.0e-15,
+        abs_tol=1.0e-15,
+    )
+
+
+
+
+def test_irrep_complete_projection_retains_all_raw_irrep_types():
+    from mace.modules.rigid_pair_tp import (
+        RigidPairIrrepCompleteEdgeEmbedding,
+    )
+
+    embedding = RigidPairIrrepCompleteEdgeEmbedding(
+        lmax=3,
+    )
+
+    raw_types = {
+        (ir.l, ir.p)
+        for _, ir in embedding.full_pair.irreps_out
+    }
+
+    compact_types = {
+        (ir.l, ir.p)
+        for _, ir in embedding.edge_irreps
+    }
+
+    assert compact_types == raw_types
+    assert all(
+        mul == 1
+        for mul, _ in embedding.edge_irreps
+    )
+
+    # Actual lmax=3 raw TP irrep support:
+    #
+    #   0e + 1e + 2e + 3e + 4e
+    #   0o + 1o + 2o + 3o + 4o + 5o
+    #
+    # dimensions:
+    #   even = 1 + 3 + 5 + 7 + 9      = 25
+    #   odd  = 1 + 3 + 5 + 7 + 9 + 11 = 36
+    #
+    assert embedding.edge_irreps.dim == 61

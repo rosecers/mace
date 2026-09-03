@@ -36,8 +36,13 @@ from mace.data.rigid_body import (
     quaternion_to_matrix,
 )
 from mace.data.rigid_features import validate_rigid_feature_mode
+from mace.modules.rigid_pair_invariant import RigidPairInvariantRadialConditioning
+from mace.modules.rigid_pair_tp import RigidPairIrrepCompleteEdgeEmbedding
+from mace.modules.rigid_pair_tp import RigidPairRawEdgeEmbedding
 from mace.modules.rigid_pair_tp import (
     RigidPairEdgeEmbedding,
+    RigidPairC2EdgeEmbedding,
+    RigidPairD6EdgeEmbedding,
     validate_rigid_pair_mode,
 )
 
@@ -140,6 +145,7 @@ class MACE(torch.nn.Module):
         keep_last_layer_irreps: bool = False,
         rigid_feature_mode: str = "moi",
         rigid_pair_mode: str = "none",
+        rigid_pair_multiplicity: int = 1,
     ):
         super().__init__()
         self.register_buffer(
@@ -166,6 +172,18 @@ class MACE(torch.nn.Module):
         self.use_edge_irreps_first = use_edge_irreps_first
         self.rigid_feature_mode = validate_rigid_feature_mode(rigid_feature_mode)
         self.rigid_pair_mode = validate_rigid_pair_mode(rigid_pair_mode)
+
+        if (
+            isinstance(rigid_pair_multiplicity, bool)
+            or not isinstance(rigid_pair_multiplicity, int)
+            or rigid_pair_multiplicity < 1
+        ):
+            raise ValueError(
+                "rigid_pair_multiplicity must be a positive integer, "
+                f"got {rigid_pair_multiplicity!r}"
+            )
+
+        self.rigid_pair_multiplicity = rigid_pair_multiplicity
 
         if self.rigid_pair_mode != "none" and use_so3:
             raise ValueError(
@@ -262,6 +280,26 @@ class MACE(torch.nn.Module):
             distance_transform=distance_transform,
             apply_cutoff=apply_cutoff,
         )
+
+        self.rigid_pair_radial_conditioning = None
+
+        if self.rigid_pair_mode == "invariant_radial":
+            # Construct the optional conditioner without advancing the
+            # global CPU RNG state.  Thus, for a fixed training seed,
+            # all ordinary MACE parameters retain exactly the same
+            # initialization as rigid_pair_mode="none".
+            #
+            # This matters for controlled representation comparisons:
+            # adding an auxiliary module should not silently change the
+            # random initialization of the baseline interaction stack.
+            with torch.random.fork_rng(devices=[]):
+                self.rigid_pair_radial_conditioning = (
+                    RigidPairInvariantRadialConditioning(
+                        radial_dim=self.radial_embedding.out_dim,
+                        r_max=r_max,
+                    )
+                )
+
         edge_feats_irreps = o3.Irreps(
             f"{self.radial_embedding.out_dim + 5}x0e"
         )
@@ -290,11 +328,125 @@ class MACE(torch.nn.Module):
             sh_irreps, normalize=True, normalization="component"
         )
 
+        # Effective edge irreps consumed by the MACE interaction blocks.
+        # In the legacy path this is just the ordinary geometric SH basis.
+        edge_attrs_irreps = sh_irreps
+
         if self.rigid_pair_mode == "full_frame":
             self.rigid_pair_edge_embedding = RigidPairEdgeEmbedding(
                 lmax=max_ell,
                 edge_irreps=sh_irreps,
+                multiplicity=self.rigid_pair_multiplicity,
             )
+
+            # Keep ordinary geometric SH and rigid-pair orientation
+            # features as independent equivariant channels.
+            #
+            # Forward layout:
+            #   [ordinary SH | rigid-pair SH]
+            edge_attrs_irreps = (
+                sh_irreps
+                + self.rigid_pair_edge_embedding.edge_irreps
+            )
+
+        elif self.rigid_pair_mode == "full_frame_compact":
+            # Compact residual rigid-pair pathway.
+            #
+            # RigidPairEdgeEmbedding already projects the complete
+            # full-frame tensor product into the ordinary spherical-
+            # harmonic edge irreps.
+            #
+            # Unlike full_frame, do not concatenate those projected
+            # features onto the geometric SH representation. Therefore
+            # the downstream MACE interaction stack retains exactly its
+            # ordinary edge dimensionality.
+            self.rigid_pair_edge_embedding = RigidPairEdgeEmbedding(
+                lmax=max_ell,
+                edge_irreps=sh_irreps,
+                multiplicity=1,
+            )
+
+            # Begin with zero rigid residual. RigidPairEdgeEmbedding is
+            # constructed under fork_rng, so the ordinary MACE parameter
+            # initialization remains identical to the baseline model.
+            with torch.no_grad():
+                self.rigid_pair_edge_embedding.projection.weight.zero_()
+
+            edge_attrs_irreps = sh_irreps
+
+        elif self.rigid_pair_mode == "d6_frame_compact":
+            self.rigid_pair_edge_embedding = RigidPairD6EdgeEmbedding(
+                lmax=max_ell,
+                edge_irreps=sh_irreps,
+                multiplicity=1,
+            )
+            with torch.no_grad():
+                self.rigid_pair_edge_embedding.projection.weight.zero_()
+            edge_attrs_irreps = sh_irreps
+
+        elif self.rigid_pair_mode == "d6_frame":
+            self.rigid_pair_edge_embedding = RigidPairD6EdgeEmbedding(
+                lmax=max_ell,
+                edge_irreps=sh_irreps,
+                multiplicity=self.rigid_pair_multiplicity,
+            )
+
+            # Keep ordinary geometric SH and rigid-pair orientation
+            # features as independent equivariant channels.
+            #
+            # Forward layout:
+            #   [ordinary SH | rigid-pair SH]
+            edge_attrs_irreps = (
+                sh_irreps
+                + self.rigid_pair_edge_embedding.edge_irreps
+            )
+
+        elif self.rigid_pair_mode == "c2_frame":
+            self.rigid_pair_edge_embedding = RigidPairC2EdgeEmbedding(
+                lmax=max_ell,
+                edge_irreps=sh_irreps,
+                multiplicity=self.rigid_pair_multiplicity,
+            )
+
+            # Keep ordinary geometric SH and rigid-pair orientation
+            # features as independent equivariant channels.
+            #
+            # Forward layout:
+            #   [ordinary SH | rigid-pair SH]
+            edge_attrs_irreps = (
+                sh_irreps
+                + self.rigid_pair_edge_embedding.edge_irreps
+            )
+
+        elif self.rigid_pair_mode == "full_frame_irrep_complete":
+            self.rigid_pair_edge_embedding = (
+                RigidPairIrrepCompleteEdgeEmbedding(
+                    lmax=max_ell,
+                )
+            )
+
+            edge_attrs_irreps = (
+                sh_irreps
+                + self.rigid_pair_edge_embedding.edge_irreps
+            )
+
+        elif self.rigid_pair_mode == "full_frame_raw":
+            # Diagnostic upper bound: retain the complete
+            #
+            #   Y_l(r_hat) x frame_i x frame_j
+            #
+            # tensor-product basis with no learned compression.
+            self.rigid_pair_edge_embedding = RigidPairRawEdgeEmbedding(
+                lmax=max_ell,
+            )
+
+            edge_attrs_irreps = (
+                sh_irreps
+                + self.rigid_pair_edge_embedding.edge_irreps
+            )
+
+        self.edge_attrs_irreps = edge_attrs_irreps
+
         if radial_MLP is None:
             radial_MLP = [64, 64, 64]
         # Interactions and readout
@@ -309,7 +461,7 @@ class MACE(torch.nn.Module):
         inter = interaction_cls_first(
             node_attrs_irreps=node_attr_irreps,
             node_feats_irreps=node_feats_irreps,
-            edge_attrs_irreps=sh_irreps,
+            edge_attrs_irreps=edge_attrs_irreps,
             edge_feats_irreps=edge_feats_irreps,
             target_irreps=interaction_irreps_first,
             hidden_irreps=hidden_irreps_out,
@@ -361,7 +513,7 @@ class MACE(torch.nn.Module):
             inter = interaction_cls(
                 node_attrs_irreps=node_attr_irreps,
                 node_feats_irreps=hidden_irreps,
-                edge_attrs_irreps=sh_irreps,
+                edge_attrs_irreps=edge_attrs_irreps,
                 edge_feats_irreps=edge_feats_irreps,
                 target_irreps=interaction_irreps,
                 hidden_irreps=hidden_irreps_out,
@@ -407,6 +559,21 @@ class MACE(torch.nn.Module):
                 )
 
     def __setstate__(self, state):
+        # Registered nn.Module children are serialized inside
+        # state["_modules"], not directly in self.__dict__.  Modify the
+        # serialized module registry only for genuinely old models that
+        # predate invariant-radial conditioning.  Do not overwrite a
+        # conditioner that is already present in the pickle.
+        modules = state.get("_modules")
+        if (
+            isinstance(modules, dict)
+            and "rigid_pair_radial_conditioning" not in modules
+        ):
+            modules["rigid_pair_radial_conditioning"] = None
+
+        if "rigid_pair_multiplicity" not in self.__dict__:
+            self.rigid_pair_multiplicity = 1
+
         super().__setstate__(state)
         if not hasattr(self, "rigid_pair_mode"):
             self.rigid_pair_mode = "none"
@@ -506,15 +673,42 @@ class MACE(torch.nn.Module):
         )
         node_feats = node_feats + inertia_node_feats
         edge_attrs = self.spherical_harmonics(vectors)
-        if self.rigid_pair_mode == "full_frame":
-            edge_attrs = edge_attrs + self.rigid_pair_edge_embedding(
+        if self.rigid_pair_mode in (
+            "full_frame_compact",
+            "d6_frame_compact",
+        ):
+            rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
                 data["quaternions"],
                 data["edge_index"],
                 vectors,
             )
+            edge_attrs = edge_attrs + rigid_pair_edge_attrs
+
+        elif self.rigid_pair_mode in ("full_frame", "full_frame_irrep_complete", "full_frame_raw", "c2_frame", "d6_frame"):
+            rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
+                data["quaternions"],
+                data["edge_index"],
+                vectors,
+            )
+            edge_attrs = torch.cat(
+                (
+                    edge_attrs,
+                    rigid_pair_edge_attrs,
+                ),
+                dim=-1,
+            )
         edge_feats, cutoff = self.radial_embedding(
             lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
+
+        if self.rigid_pair_mode == "invariant_radial":
+            edge_feats = self.rigid_pair_radial_conditioning(
+                edge_feats=edge_feats,
+                quaternions=data["quaternions"],
+                edge_index=data["edge_index"],
+                edge_vectors=vectors,
+            )
+
         inertia_feats = inertia_edge_invariants(
             edge_invariant_tensor,
             data["edge_index"],
@@ -733,15 +927,42 @@ class ScaleShiftMACE(MACE):
         )
         node_feats = node_feats + inertia_node_feats
         edge_attrs = self.spherical_harmonics(vectors)
-        if self.rigid_pair_mode == "full_frame":
-            edge_attrs = edge_attrs + self.rigid_pair_edge_embedding(
+        if self.rigid_pair_mode in (
+            "full_frame_compact",
+            "d6_frame_compact",
+        ):
+            rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
                 data["quaternions"],
                 data["edge_index"],
                 vectors,
             )
+            edge_attrs = edge_attrs + rigid_pair_edge_attrs
+
+        elif self.rigid_pair_mode in ("full_frame", "full_frame_irrep_complete", "full_frame_raw", "c2_frame", "d6_frame"):
+            rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
+                data["quaternions"],
+                data["edge_index"],
+                vectors,
+            )
+            edge_attrs = torch.cat(
+                (
+                    edge_attrs,
+                    rigid_pair_edge_attrs,
+                ),
+                dim=-1,
+            )
         edge_feats, cutoff = self.radial_embedding(
             lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
+
+        if self.rigid_pair_mode == "invariant_radial":
+            edge_feats = self.rigid_pair_radial_conditioning(
+                edge_feats=edge_feats,
+                quaternions=data["quaternions"],
+                edge_index=data["edge_index"],
+                edge_vectors=vectors,
+            )
+
         inertia_feats = inertia_edge_invariants(
             edge_invariant_tensor,
             data["edge_index"],

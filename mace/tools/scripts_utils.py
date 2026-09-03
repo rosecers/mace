@@ -1076,6 +1076,48 @@ def get_params_options(
             }
         )
 
+    # BEGIN rigid-pair optimizer registration
+    # Trainable rigid-pair modules are outside the standard
+    # node/interactions/products/readouts hierarchy. Register them
+    # explicitly so optimizer.step() updates their parameters.
+    rigid_decay = []
+    rigid_no_decay = []
+
+    for module_name in (
+        "rigid_pair_edge_embedding",
+        "rigid_pair_radial_conditioning",
+    ):
+        module = getattr(model, module_name, None)
+
+        if module is None:
+            continue
+
+        for name, param in module.named_parameters():
+            if not param.requires_grad:
+                continue
+
+            if name.endswith("weight"):
+                rigid_decay.append(param)
+            else:
+                rigid_no_decay.append(param)
+
+    if rigid_decay:
+        param_options["params"].append(
+            {
+                "params": rigid_decay,
+                "weight_decay": args.weight_decay,
+            }
+        )
+
+    if rigid_no_decay:
+        param_options["params"].append(
+            {
+                "params": rigid_no_decay,
+                "weight_decay": 0.0,
+            }
+        )
+    # END rigid-pair optimizer registration
+
     return param_options
 
 

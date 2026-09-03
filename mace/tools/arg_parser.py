@@ -280,10 +280,30 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         "--rigid_pair_mode",
         type=str,
         default="none",
-        choices=("none", "full_frame"),
+        choices=(
+            'none',
+            'full_frame',
+            'full_frame_compact',
+            'full_frame_irrep_complete',
+            'full_frame_raw',
+            'invariant_radial',
+            'c2_frame',
+            'd6_frame',
+            'd6_frame_compact',
+        ),
         help=(
             "Optional rigid-body pair-orientation contribution to MACE "
             "edge attributes."
+        ),
+    )
+    parser.add_argument(
+        "--rigid_pair_multiplicity",
+        type=int,
+        default=1,
+        help=(
+            "Number of learned copies of each rigid-pair output irrep "
+            "for --rigid_pair_mode=full_frame. Default 1 preserves "
+            "the original projected full-frame model."
         ),
     )
 
