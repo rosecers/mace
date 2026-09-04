@@ -1,5 +1,5 @@
-from pathlib import Path
 import random
+from pathlib import Path
 
 import numpy as np
 from ase.calculators.singlepoint import SinglePointCalculator
@@ -14,9 +14,7 @@ source = Path(
 frames = read(source, index=":")
 
 if len(frames) < 5:
-    raise RuntimeError(
-        f"Need at least five configurations; found {len(frames)}"
-    )
+    raise RuntimeError(f"Need at least five configurations; found {len(frames)}")
 
 prepared = []
 

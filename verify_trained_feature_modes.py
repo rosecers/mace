@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import torch
 from ase.io import read
-from mace.calculators import MACECalculator
 
+from mace.calculators import MACECalculator
 
 DATA = (
     "/Users/rca/source_installs/anisoap/"
@@ -16,10 +16,10 @@ DATA = (
 )
 
 
-def energy(atoms, calculator) -> float:
-    trial = atoms.copy()
-    calculator.reset()
-    trial.calc = calculator
+def energy(structure, calc) -> float:
+    trial = structure.copy()
+    calc.reset()
+    trial.calc = calc
     return float(trial.get_potential_energy())
 
 
@@ -44,11 +44,7 @@ for mode in (
     "traceless_moi",
     "moi",
 ):
-    paths = sorted(
-        Path("checkpoints").glob(
-            f"smoke_{mode}*.model"
-        )
-    )
+    paths = sorted(Path("checkpoints").glob(f"smoke_{mode}*.model"))
 
     if not paths:
         print(f"{mode:16s} model not found")

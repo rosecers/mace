@@ -1,5 +1,5 @@
-from pathlib import Path
 import inspect
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,17 +9,14 @@ from e3nn import o3
 
 from mace.data import AtomicData
 from mace.data.utils import config_from_atoms
-from mace.modules.blocks import interaction_classes
+from mace.modules import blocks
 from mace.modules.models import ScaleShiftMACE
 from mace.tools import AtomicNumberTable
-
 
 # -----------------------------
 # User settings
 # -----------------------------
-CHECKPOINT = Path(
-    "checkpoints/energyfit_moi_128_ew100_fw1_seed29_run-29_epoch-23.pt"
-)
+CHECKPOINT = Path("checkpoints/energyfit_moi_128_ew100_fw1_seed29_run-29_epoch-23.pt")
 DATA_FILE = Path("publication_splits/random_test.xyz")
 OUTPUT_PREFIX = Path("energy_overfit/parity/energyfit_moi_128_ew100_fw1_seed29_test")
 DEVICE = "cpu"
@@ -65,8 +62,8 @@ def build_hidden_irreps(num_channels: int, max_l: int) -> o3.Irreps:
     return o3.Irreps(" + ".join(parts))
 
 
-def instantiate_model(z_table):
-    interaction = interaction_classes[INTERACTION_NAME]
+def instantiate_model(atomic_number_table):
+    interaction = getattr(blocks, INTERACTION_NAME)
     hidden_irreps = build_hidden_irreps(NUM_CHANNELS, MAX_L)
     mlp_irreps = o3.Irreps("16x0e")
 
@@ -79,12 +76,12 @@ def instantiate_model(z_table):
         "interaction_cls_first": interaction,
         "interaction_cls": interaction,
         "num_interactions": NUM_INTERACTIONS,
-        "num_elements": len(z_table),
+        "num_elements": len(atomic_number_table),
         "hidden_irreps": hidden_irreps,
         "MLP_irreps": mlp_irreps,
-        "atomic_energies": [[0.0] * len(z_table)],
+        "atomic_energies": [[0.0] * len(atomic_number_table)],
         "avg_num_neighbors": 1.0,
-        "atomic_numbers": z_table.zs,
+        "atomic_numbers": atomic_number_table.zs,
         "correlation": CORRELATION,
         "gate": torch.nn.functional.silu,
         "atomic_inter_scale": 1.0,
@@ -100,7 +97,7 @@ def instantiate_model(z_table):
     sig = inspect.signature(ScaleShiftMACE.__init__)
     kwargs = {}
 
-    for name, param in sig.parameters.items():
+    for name in sig.parameters:
         if name == "self":
             continue
         if name in candidate_kwargs:
@@ -110,21 +107,21 @@ def instantiate_model(z_table):
     for key in sorted(kwargs):
         print(f"  {key} = {kwargs[key]!r}")
 
-    model = ScaleShiftMACE(**kwargs)
-    return model
+    instantiated_model = ScaleShiftMACE(**kwargs)
+    return instantiated_model
 
 
-def atoms_to_model_input(atoms, z_table):
-    config = config_from_atoms(atoms)
+def atoms_to_model_input(structure, atomic_number_table):
+    config = config_from_atoms(structure)
     data = AtomicData.from_config(
         config,
-        z_table=z_table,
+        z_table=atomic_number_table,
         cutoff=R_MAX,
     )
 
     # Single-graph batch metadata
-    data.batch = torch.zeros(len(atoms), dtype=torch.long)
-    data.ptr = torch.tensor([0, len(atoms)], dtype=torch.long)
+    data.batch = torch.zeros(len(structure), dtype=torch.long)
+    data.ptr = torch.tensor([0, len(structure)], dtype=torch.long)
     data.head = torch.zeros(1, dtype=torch.long)
 
     data = data.to(DEVICE)
@@ -147,11 +144,7 @@ frames = read(DATA_FILE, index=":")
 print(f"Loaded {len(frames)} frames")
 
 all_atomic_numbers = sorted(
-    {
-        int(z)
-        for atoms in frames
-        for z in atoms.get_atomic_numbers().tolist()
-    }
+    {int(z) for atoms in frames for z in atoms.get_atomic_numbers().tolist()}
 )
 z_table = AtomicNumberTable(all_atomic_numbers)
 print("Atomic number table:", z_table.zs)

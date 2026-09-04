@@ -260,13 +260,52 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--rigid_feature_mode",
         type=str,
-        default="moi",
-        choices=("none", "isotropic", "traceless_moi", "moi"),
+        default="none",
+        choices=(
+            "none",
+            "isotropic",
+            "traceless_moi",
+            "moi",
+            "gyration",
+            "steric_extent",
+            "electrostatic_quadrupole",
+        ),
         help=(
             "Rigid-body node feature ablation. The model architecture is kept "
             "fixed; disabled MOI sectors and edge invariants are zeroed."
         ),
     )
+    parser.add_argument(
+        "--rigid_pair_mode",
+        type=str,
+        default="none",
+        choices=(
+            "none",
+            "full_frame",
+            "full_frame_compact",
+            "full_frame_irrep_complete",
+            "full_frame_raw",
+            "invariant_radial",
+            "c2_frame",
+            "d6_frame",
+            "d6_frame_compact",
+        ),
+        help=(
+            "Optional rigid-body pair-orientation contribution to MACE "
+            "edge attributes."
+        ),
+    )
+    parser.add_argument(
+        "--rigid_pair_multiplicity",
+        type=int,
+        default=1,
+        help=(
+            "Number of learned copies of each rigid-pair output irrep "
+            "for --rigid_pair_mode=full_frame. Default 1 preserves "
+            "the original projected full-frame model."
+        ),
+    )
+
     parser.add_argument(
         "--MLP_irreps",
         help="hidden irreps of the MLP in last readout",
@@ -564,13 +603,6 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         help="When replay pseudolabels are generated, always generate stress labels even if the original replay data lacked stress",
         type=str2bool,
         default=False,
-    )
-    parser.add_argument(
-        "--foundation_filter_elements",
-        help="Filter element during fine-tuning",
-        type=str2bool,
-        default=True,
-        required=False,
     )
     parser.add_argument(
         "--heads",
@@ -1039,9 +1071,37 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--foundation_model_readout",
-        help="Use readout of foundation model for transfer learning",
-        action="store_false",
+        help=(
+            "Transfer the foundation model's readout weights. Pass the flag with "
+            "no value to turn the transfer off, or an explicit boolean."
+        ),
+        # `nargs="?"` rather than `store_false`, so the flag reads the same way
+        # from a YAML config as from the command line. configargparse turns a
+        # config entry into the flag plus its value, and a `store_false` switch
+        # ignores that value: `foundation_model_readout: true` then applied the
+        # bare switch and turned the transfer OFF. Accepting an optional value
+        # keeps the bare form working and makes the config say what it means.
+        nargs="?",
+        const=False,
+        type=str2bool,
         default=True,
+    )
+    parser.add_argument(
+        # Deprecated spelling of the flag above, kept because it has been the
+        # only way to reach this behaviour since April 2024. It never filtered
+        # elements: it was passed as `load_readout`, so both names have always
+        # meant "copy the foundation model's readout weights". Shares the dest,
+        # so old scripts keep working and get exactly what they got before.
+        "--foundation_filter_elements",
+        help=(
+            "Deprecated alias of --foundation_model_readout. Despite the name it "
+            "never filtered elements; it decides whether the foundation model's "
+            "readout weights are transferred."
+        ),
+        dest="foundation_model_readout",
+        type=str2bool,
+        default=True,
+        required=False,
     )
     parser.add_argument(
         "--finetune_dipoles_polarizabilities",
@@ -1208,6 +1268,18 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         help="Whether to use data augmentation on magnetic moment training. ",
         type=str2bool,
         default=False,
+    )
+    parser.add_argument(
+        "--data_aug_magmom_mode",
+        help="Which magnetic symmetries to augment. 'non-soc' draws from the full "
+        "O(3)_spin (random rotation AND global sign flip), valid when the energy is "
+        "invariant under rotating the moments independently of the lattice. 'soc' applies "
+        "ONLY the sign flip m -> -m: with spin-orbit coupling a free spin rotation is not "
+        "a symmetry, so augmenting with it would teach an invariance the model must not "
+        "have, while time reversal still holds at zero field.",
+        type=str,
+        default="non-soc",
+        choices=["soc", "non-soc"],
     )
 
     return parser

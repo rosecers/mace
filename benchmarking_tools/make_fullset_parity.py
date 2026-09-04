@@ -2,14 +2,11 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 from ase.io import read
+
 from mace.calculators import MACECalculator
 
-
-CHECKPOINT = Path(
-    "checkpoints/dimer_full_L3_I2_v1_run-17_epoch-105.pt"
-)
+CHECKPOINT = Path("checkpoints/dimer_full_L3_I2_v1_run-17_epoch-105.pt")
 TEST_FILE = Path("test.xyz")
 DEVICE = "cpu"
 DTYPE = "float64"
@@ -21,9 +18,7 @@ def metrics(reference: np.ndarray, prediction: np.ndarray):
     rmse = np.sqrt(np.mean(error**2))
 
     ss_res = np.sum(error**2)
-    ss_tot = np.sum(
-        (reference - np.mean(reference)) ** 2
-    )
+    ss_tot = np.sum((reference - np.mean(reference)) ** 2)
     r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
 
     return mae, rmse, r2
@@ -61,9 +56,7 @@ def parity_plot(
     ax.text(
         0.04,
         0.96,
-        f"MAE = {mae:.6g}\n"
-        f"RMSE = {rmse:.6g}\n"
-        f"R² = {r2:.6g}",
+        f"MAE = {mae:.6g}\n" f"RMSE = {rmse:.6g}\n" f"R² = {r2:.6g}",
         transform=ax.transAxes,
         va="top",
     )
@@ -80,9 +73,7 @@ def parity_plot(
 
 
 if not CHECKPOINT.exists():
-    raise FileNotFoundError(
-        f"Checkpoint not found: {CHECKPOINT}"
-    )
+    raise FileNotFoundError(f"Checkpoint not found: {CHECKPOINT}")
 
 frames = read(TEST_FILE, index=":")
 
