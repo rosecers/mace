@@ -332,3 +332,59 @@ def test_automatic_symmetry_features_remain_globally_equivariant():
         atol=ATOL,
         rtol=RTOL,
     )
+
+
+@pytest.mark.parametrize(
+    ("embedding_cls", "kwargs"),
+    (
+        (RigidPairC2EdgeEmbedding, {"c2_axis": 1}),
+        (RigidPairD6EdgeEmbedding, {}),
+    ),
+)
+def test_legacy_rigid_pair_wrapper_pickle_is_migrated(
+    embedding_cls,
+    kwargs,
+):
+    import io
+
+    torch.manual_seed(1234)
+    module = embedding_cls(
+        lmax=2,
+        edge_irreps=o3.Irreps.spherical_harmonics(2),
+        multiplicity=2,
+        **kwargs,
+    ).to(dtype=DTYPE)
+
+    quaternions, edge_index, edge_vectors = _pair_inputs()
+    reference = module(
+        quaternions,
+        edge_index,
+        edge_vectors,
+    )
+
+    del module._modules["body_features"]
+    module.__dict__.pop("body_irreps", None)
+    module.__dict__.pop("restrict_pair_irreps", None)
+
+    buffer = io.BytesIO()
+    torch.save(module, buffer)
+    buffer.seek(0)
+
+    loaded = torch.load(
+        buffer,
+        map_location="cpu",
+        weights_only=False,
+    )
+
+    restored = loaded(
+        quaternions,
+        edge_index,
+        edge_vectors,
+    )
+
+    torch.testing.assert_close(
+        restored,
+        reference,
+        atol=ATOL,
+        rtol=RTOL,
+    )

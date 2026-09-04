@@ -534,6 +534,23 @@ def _d6_symmetry_body_features():
 class RigidPairD6EdgeEmbedding(RigidPairSymmetryEdgeEmbedding):
     """Compatibility wrapper for the historical D6 rigid-pair mode."""
 
+    def __setstate__(self, state):
+        super().__setstate__(state)
+
+        if "body_features" not in self._modules:
+            body_features = _d6_symmetry_body_features()
+            reference = self.projection.weight
+            self.body_features = body_features.to(
+                dtype=reference.dtype,
+                device=reference.device,
+            )
+
+        if "body_irreps" not in self.__dict__:
+            self.body_irreps = o3.Irreps(self.body_features.irreps)
+
+        if "restrict_pair_irreps" not in self.__dict__:
+            self.restrict_pair_irreps = True
+
     def __init__(
         self,
         max_ell=None,
@@ -557,6 +574,23 @@ class RigidPairD6EdgeEmbedding(RigidPairSymmetryEdgeEmbedding):
 
 class RigidPairC2EdgeEmbedding(RigidPairSymmetryEdgeEmbedding):
     """Compatibility wrapper for the historical C2 rigid-pair mode."""
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+
+        if "body_features" not in self._modules:
+            body_features = _c2_symmetry_body_features(self.c2_axis)
+            reference = self.projection.weight
+            self.body_features = body_features.to(
+                dtype=reference.dtype,
+                device=reference.device,
+            )
+
+        if "body_irreps" not in self.__dict__:
+            self.body_irreps = o3.Irreps(self.body_features.irreps)
+
+        if "restrict_pair_irreps" not in self.__dict__:
+            self.restrict_pair_irreps = False
 
     def __init__(
         self,

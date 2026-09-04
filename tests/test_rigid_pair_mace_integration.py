@@ -1527,3 +1527,93 @@ def test_symmetry_frame_d4_is_invariant_to_body_group():
             atol=ATOL,
             rtol=RTOL,
         )
+
+
+def test_symmetry_frame_config_round_trip():
+    from mace.tools.scripts_utils import extract_config_mace_model
+
+    model = _model(
+        "symmetry_frame",
+        rigid_pair_multiplicity=2,
+        rigid_body_symmetry="D4",
+        rigid_body_lmax=4,
+    )
+
+    config = extract_config_mace_model(model)
+
+    assert config["rigid_pair_mode"] == "symmetry_frame"
+    assert config["rigid_pair_multiplicity"] == 2
+    assert config["rigid_body_symmetry"] == "D4"
+    assert config["rigid_body_lmax"] == 4
+
+    rebuilt = model.__class__(**config).to(dtype=DTYPE)
+
+    assert rebuilt.rigid_pair_mode == "symmetry_frame"
+    assert rebuilt.rigid_pair_multiplicity == 2
+    assert rebuilt.rigid_body_symmetry == "D4"
+    assert rebuilt.rigid_body_lmax == 4
+    assert (
+        rebuilt.rigid_pair_edge_embedding.body_irreps
+        == model.rigid_pair_edge_embedding.body_irreps
+    )
+    assert (
+        rebuilt.rigid_pair_edge_embedding.edge_irreps
+        == model.rigid_pair_edge_embedding.edge_irreps
+    )
+
+
+def test_symmetry_frame_survives_model_serialization():
+    import io
+
+    model = _model(
+        "symmetry_frame",
+        rigid_pair_multiplicity=2,
+        rigid_body_symmetry="D4",
+        rigid_body_lmax=4,
+    )
+    model.eval()
+
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
+    batch = _batch(_atoms(body_i, body_j))
+
+    reference = model(
+        batch,
+        compute_force=False,
+    )["energy"]
+
+    buffer = io.BytesIO()
+    torch.save(model, buffer)
+    buffer.seek(0)
+
+    loaded = torch.load(
+        buffer,
+        map_location="cpu",
+        weights_only=False,
+    )
+    loaded.eval()
+
+    assert loaded.rigid_pair_mode == "symmetry_frame"
+    assert loaded.rigid_pair_multiplicity == 2
+    assert loaded.rigid_body_symmetry == "D4"
+    assert loaded.rigid_body_lmax == 4
+    assert (
+        loaded.rigid_pair_edge_embedding.body_irreps
+        == model.rigid_pair_edge_embedding.body_irreps
+    )
+    assert (
+        loaded.rigid_pair_edge_embedding.edge_irreps
+        == model.rigid_pair_edge_embedding.edge_irreps
+    )
+
+    restored = loaded(
+        batch,
+        compute_force=False,
+    )["energy"]
+
+    torch.testing.assert_close(
+        restored,
+        reference,
+        atol=0.0,
+        rtol=0.0,
+    )
