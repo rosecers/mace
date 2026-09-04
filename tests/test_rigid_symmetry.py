@@ -388,3 +388,49 @@ def test_legacy_rigid_pair_wrapper_pickle_is_migrated(
         atol=ATOL,
         rtol=RTOL,
     )
+
+@pytest.mark.parametrize(
+    "embedding_cls,kwargs",
+    [
+        (RigidPairC2EdgeEmbedding, {"c2_axis": 1}),
+        (RigidPairD6EdgeEmbedding, {}),
+    ],
+)
+def test_legacy_rigid_pair_wrapper_state_dict_is_migrated(
+    embedding_cls,
+    kwargs,
+):
+    edge_irreps = o3.Irreps.spherical_harmonics(2)
+
+    reference = embedding_cls(
+        lmax=2,
+        edge_irreps=edge_irreps,
+        multiplicity=2,
+        **kwargs,
+    ).to(dtype=DTYPE)
+
+    legacy_state = {
+        key: value.clone()
+        for key, value in reference.state_dict().items()
+        if not key.startswith("body_features.")
+    }
+
+    restored = embedding_cls(
+        lmax=2,
+        edge_irreps=edge_irreps,
+        multiplicity=2,
+        **kwargs,
+    ).to(dtype=DTYPE)
+
+    restored.load_state_dict(legacy_state, strict=True)
+
+    reference_state = reference.state_dict()
+    restored_state = restored.state_dict()
+
+    assert reference_state.keys() == restored_state.keys()
+
+    for key in reference_state:
+        torch.testing.assert_close(
+            restored_state[key],
+            reference_state[key],
+        )

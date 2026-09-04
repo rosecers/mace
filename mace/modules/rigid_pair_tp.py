@@ -534,6 +534,37 @@ def _d6_symmetry_body_features():
 class RigidPairD6EdgeEmbedding(RigidPairSymmetryEdgeEmbedding):
     """Compatibility wrapper for the historical D6 rigid-pair mode."""
 
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        body_prefix = prefix + "body_features."
+        body_keys = tuple(self.body_features.state_dict().keys())
+        present = [
+            body_prefix + key in state_dict
+            for key in body_keys
+        ]
+
+        if body_keys and not any(present):
+            for key, value in self.body_features.state_dict().items():
+                state_dict[body_prefix + key] = value
+
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
+
     def __setstate__(self, state):
         super().__setstate__(state)
 
@@ -574,6 +605,37 @@ class RigidPairD6EdgeEmbedding(RigidPairSymmetryEdgeEmbedding):
 
 class RigidPairC2EdgeEmbedding(RigidPairSymmetryEdgeEmbedding):
     """Compatibility wrapper for the historical C2 rigid-pair mode."""
+
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        body_prefix = prefix + "body_features."
+        body_keys = tuple(self.body_features.state_dict().keys())
+        present = [
+            body_prefix + key in state_dict
+            for key in body_keys
+        ]
+
+        if body_keys and not any(present):
+            for key, value in self.body_features.state_dict().items():
+                state_dict[body_prefix + key] = value
+
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
 
     def __setstate__(self, state):
         super().__setstate__(state)
