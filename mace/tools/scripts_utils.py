@@ -326,6 +326,23 @@ def extract_config_mace_model(model: torch.nn.Module) -> Dict[str, Any]:
         "pair_repulsion": hasattr(model, "pair_repulsion_fn"),
         "distance_transform": radial_to_transform(model.radial_embedding),
         "heads": heads,
+        "rigid_feature_mode": (
+            model.rigid_feature_mode if hasattr(model, "rigid_feature_mode") else "none"
+        ),
+        "rigid_pair_mode": (
+            model.rigid_pair_mode if hasattr(model, "rigid_pair_mode") else "none"
+        ),
+        "rigid_pair_multiplicity": (
+            model.rigid_pair_multiplicity
+            if hasattr(model, "rigid_pair_multiplicity")
+            else 1
+        ),
+        "rigid_body_symmetry": (
+            model.rigid_body_symmetry if hasattr(model, "rigid_body_symmetry") else None
+        ),
+        "rigid_body_lmax": (
+            model.rigid_body_lmax if hasattr(model, "rigid_body_lmax") else None
+        ),
     }
     if model.__class__.__name__ == "MagneticScaleShiftMACE":
         config["m_max"] = model.m_max.cpu().tolist()

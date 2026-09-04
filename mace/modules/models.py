@@ -25,8 +25,10 @@ from mace.modules.rigid_pair_tp import (
     RigidPairEdgeEmbedding,
     RigidPairIrrepCompleteEdgeEmbedding,
     RigidPairRawEdgeEmbedding,
+    RigidPairSymmetryEdgeEmbedding,
     validate_rigid_pair_mode,
 )
+from mace.modules.rigid_symmetry import automatic_named_symmetry_body_features
 from mace.tools.scatter import scatter_mean, scatter_sum
 from mace.tools.torch_tools import get_change_of_basis, spherical_to_cartesian
 
@@ -118,6 +120,8 @@ class MACE(torch.nn.Module):
         rigid_feature_mode: str = "none",
         rigid_pair_mode: str = "none",
         rigid_pair_multiplicity: int = 1,
+        rigid_body_symmetry: Optional[str] = None,
+        rigid_body_lmax: Optional[int] = None,
     ):
         super().__init__()
         self.register_buffer(
@@ -158,6 +162,27 @@ class MACE(torch.nn.Module):
             )
 
         self.rigid_pair_multiplicity = rigid_pair_multiplicity
+        self.rigid_body_symmetry = rigid_body_symmetry
+        self.rigid_body_lmax = rigid_body_lmax
+
+        if self.rigid_pair_mode in ("symmetry_frame", "symmetry_frame_compact"):
+            if (
+                not isinstance(self.rigid_body_symmetry, str)
+                or not self.rigid_body_symmetry.strip()
+            ):
+                raise ValueError(
+                    "rigid_body_symmetry must be provided for "
+                    f"rigid_pair_mode={self.rigid_pair_mode!r}"
+                )
+            if (
+                isinstance(self.rigid_body_lmax, bool)
+                or not isinstance(self.rigid_body_lmax, int)
+                or self.rigid_body_lmax < 1
+            ):
+                raise ValueError(
+                    "rigid_body_lmax must be a positive integer for "
+                    f"rigid_pair_mode={self.rigid_pair_mode!r}"
+                )
 
         if self.rigid_pair_mode != "none" and use_so3:
             raise ValueError(
@@ -294,7 +319,33 @@ class MACE(torch.nn.Module):
         # In the legacy path this is just the ordinary geometric SH basis.
         edge_attrs_irreps = sh_irreps
 
-        if self.rigid_pair_mode == "full_frame":
+        if self.rigid_pair_mode == "symmetry_frame":
+            self.rigid_pair_edge_embedding = RigidPairSymmetryEdgeEmbedding(
+                body_features=automatic_named_symmetry_body_features(
+                    self.rigid_body_symmetry,
+                    lmax=self.rigid_body_lmax,
+                ),
+                lmax=max_ell,
+                edge_irreps=sh_irreps,
+                multiplicity=self.rigid_pair_multiplicity,
+                restrict_pair_irreps=True,
+            )
+            edge_attrs_irreps = sh_irreps + self.rigid_pair_edge_embedding.edge_irreps
+        elif self.rigid_pair_mode == "symmetry_frame_compact":
+            self.rigid_pair_edge_embedding = RigidPairSymmetryEdgeEmbedding(
+                body_features=automatic_named_symmetry_body_features(
+                    self.rigid_body_symmetry,
+                    lmax=self.rigid_body_lmax,
+                ),
+                lmax=max_ell,
+                edge_irreps=sh_irreps,
+                multiplicity=1,
+                restrict_pair_irreps=True,
+            )
+            with torch.no_grad():
+                self.rigid_pair_edge_embedding.projection.weight.zero_()
+            edge_attrs_irreps = sh_irreps
+        elif self.rigid_pair_mode == "full_frame":
             self.rigid_pair_edge_embedding = RigidPairEdgeEmbedding(
                 lmax=max_ell,
                 edge_irreps=sh_irreps,
@@ -506,6 +557,10 @@ class MACE(torch.nn.Module):
     def __setstate__(self, state):
         if "rigid_pair_multiplicity" not in self.__dict__:
             self.rigid_pair_multiplicity = 1
+        if "rigid_body_symmetry" not in self.__dict__:
+            self.rigid_body_symmetry = None
+        if "rigid_body_lmax" not in self.__dict__:
+            self.rigid_body_lmax = None
 
         super().__setstate__(state)
         if not hasattr(self, "rigid_pair_radial_conditioning"):
@@ -607,6 +662,7 @@ class MACE(torch.nn.Module):
             if self.rigid_pair_mode in (
                 "full_frame_compact",
                 "d6_frame_compact",
+                "symmetry_frame_compact",
             ):
                 rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
                     data["quaternions"],
@@ -621,6 +677,7 @@ class MACE(torch.nn.Module):
                 "full_frame_raw",
                 "c2_frame",
                 "d6_frame",
+                "symmetry_frame",
             ):
                 rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
                     data["quaternions"],
@@ -872,6 +929,7 @@ class ScaleShiftMACE(MACE):
             if self.rigid_pair_mode in (
                 "full_frame_compact",
                 "d6_frame_compact",
+                "symmetry_frame_compact",
             ):
                 rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
                     data["quaternions"],
@@ -886,6 +944,7 @@ class ScaleShiftMACE(MACE):
                 "full_frame_raw",
                 "c2_frame",
                 "d6_frame",
+                "symmetry_frame",
             ):
                 rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
                     data["quaternions"],

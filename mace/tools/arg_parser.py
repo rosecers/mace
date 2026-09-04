@@ -289,11 +289,25 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "c2_frame",
             "d6_frame",
             "d6_frame_compact",
+            "symmetry_frame",
+            "symmetry_frame_compact",
         ),
         help=(
             "Optional rigid-body pair-orientation contribution to MACE "
             "edge attributes."
         ),
+    )
+    parser.add_argument(
+        "--rigid_body_symmetry",
+        type=str,
+        default=None,
+        help="Proper finite body symmetry for symmetry_frame modes.",
+    )
+    parser.add_argument(
+        "--rigid_body_lmax",
+        type=int,
+        default=None,
+        help="Maximum body angular rank for symmetry_frame modes.",
     )
     parser.add_argument(
         "--rigid_pair_multiplicity",

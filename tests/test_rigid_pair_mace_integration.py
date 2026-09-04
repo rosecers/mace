@@ -91,7 +91,12 @@ def _batch(atoms):
     return batch
 
 
-def _model(rigid_pair_mode: str, rigid_pair_multiplicity: int = 1):
+def _model(
+    rigid_pair_mode: str,
+    rigid_pair_multiplicity: int = 1,
+    rigid_body_symmetry=None,
+    rigid_body_lmax=None,
+):
     torch.manual_seed(1234)
 
     model = modules.ScaleShiftMACE(
@@ -99,17 +104,13 @@ def _model(rigid_pair_mode: str, rigid_pair_multiplicity: int = 1):
         num_bessel=4,
         num_polynomial_cutoff=5,
         max_ell=2,
-        interaction_cls=modules.interaction_classes[
-            "RealAgnosticInteractionBlock"
-        ],
+        interaction_cls=modules.interaction_classes["RealAgnosticInteractionBlock"],
         interaction_cls_first=modules.interaction_classes[
             "RealAgnosticInteractionBlock"
         ],
         num_interactions=2,
         num_elements=1,
-        hidden_irreps=o3.Irreps(
-            "8x0e + 8x1o + 8x2e"
-        ),
+        hidden_irreps=o3.Irreps("8x0e + 8x1o + 8x2e"),
         MLP_irreps=o3.Irreps("8x0e"),
         gate=F.silu,
         atomic_energies=np.asarray([0.0]),
@@ -122,6 +123,8 @@ def _model(rigid_pair_mode: str, rigid_pair_multiplicity: int = 1):
         rigid_feature_mode="none",
         rigid_pair_mode=rigid_pair_mode,
         rigid_pair_multiplicity=rigid_pair_multiplicity,
+        rigid_body_symmetry=rigid_body_symmetry,
+        rigid_body_lmax=rigid_body_lmax,
     )
 
     return model.to(dtype=DTYPE)
@@ -161,9 +164,7 @@ def test_none_mode_is_orientation_blind():
     axis = np.asarray([0.3, 1.0, -0.2], dtype=float)
     axis /= np.linalg.norm(axis)
 
-    rotated_neighbor = Rotation.from_rotvec(
-        axis * 0.83
-    )
+    rotated_neighbor = Rotation.from_rotvec(axis * 0.83)
 
     out_a = model(
         _batch(_atoms(identity, identity)),
@@ -192,9 +193,7 @@ def test_full_frame_mode_detects_neighbor_rotation():
     axis = np.asarray([0.3, 1.0, -0.2], dtype=float)
     axis /= np.linalg.norm(axis)
 
-    rotated_neighbor = Rotation.from_rotvec(
-        axis * 0.83
-    )
+    rotated_neighbor = Rotation.from_rotvec(axis * 0.83)
 
     out_a = model(
         _batch(_atoms(identity, identity)),
@@ -206,11 +205,7 @@ def test_full_frame_mode_detects_neighbor_rotation():
         compute_force=False,
     )
 
-    delta = torch.max(
-        torch.abs(
-            out_a["energy"] - out_b["energy"]
-        )
-    )
+    delta = torch.max(torch.abs(out_a["energy"] - out_b["energy"]))
 
     assert delta > 1.0e-10
 
@@ -219,17 +214,11 @@ def test_full_frame_energy_is_globally_rotation_invariant():
     model = _model("full_frame")
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
 
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
 
-    global_rotation = Rotation.from_rotvec(
-        np.asarray([0.2, 0.5, -0.8])
-    )
+    global_rotation = Rotation.from_rotvec(np.asarray([0.2, 0.5, -0.8]))
 
     positions = np.asarray(
         [
@@ -273,17 +262,11 @@ def test_full_frame_forces_rotate_covariantly():
     model = _model("full_frame")
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
 
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
 
-    global_rotation = Rotation.from_rotvec(
-        np.asarray([0.2, 0.5, -0.8])
-    )
+    global_rotation = Rotation.from_rotvec(np.asarray([0.2, 0.5, -0.8]))
 
     positions = np.asarray(
         [
@@ -335,9 +318,7 @@ def test_rigid_pair_projection_gets_gradient():
     model.train()
 
     body_i = Rotation.identity()
-    body_j = Rotation.from_rotvec(
-        np.asarray([0.2, 0.4, -0.1])
-    )
+    body_j = Rotation.from_rotvec(np.asarray([0.2, 0.4, -0.1]))
 
     output = model(
         _batch(_atoms(body_i, body_j)),
@@ -347,24 +328,14 @@ def test_rigid_pair_projection_gets_gradient():
     loss = output["energy"].sum()
     loss.backward()
 
-    parameters = list(
-        model.rigid_pair_edge_embedding
-        .projection.parameters()
-    )
+    parameters = list(model.rigid_pair_edge_embedding.projection.parameters())
 
     assert parameters
-    assert all(
-        parameter.grad is not None
-        for parameter in parameters
-    )
+    assert all(parameter.grad is not None for parameter in parameters)
 
-    total_gradient = sum(
-        parameter.grad.abs().sum()
-        for parameter in parameters
-    )
+    total_gradient = sum(parameter.grad.abs().sum() for parameter in parameters)
 
     assert total_gradient > 0.0
-
 
 
 def test_full_frame_edge_irreps_are_concatenated():
@@ -377,9 +348,7 @@ def test_full_frame_edge_irreps_are_concatenated():
     expected = sh_irreps + rigid_irreps
 
     assert model.edge_attrs_irreps == expected
-    assert model.edge_attrs_irreps.dim == (
-        sh_irreps.dim + rigid_irreps.dim
-    )
+    assert model.edge_attrs_irreps.dim == (sh_irreps.dim + rigid_irreps.dim)
 
     assert rigid_irreps == sh_irreps
     assert model.edge_attrs_irreps.dim == 2 * sh_irreps.dim
@@ -415,8 +384,7 @@ def test_forward_keeps_geometric_and_rigid_edge_channels_distinct():
     def capture_edge_attrs(_module, _args, kwargs):
         if "edge_attrs" not in kwargs:
             raise RuntimeError(
-                f"Interaction kwargs do not contain edge_attrs: "
-                f"{sorted(kwargs)}"
+                f"Interaction kwargs do not contain edge_attrs: " f"{sorted(kwargs)}"
             )
 
         edge_attrs = kwargs["edge_attrs"]
@@ -466,15 +434,9 @@ def test_forward_keeps_geometric_and_rigid_edge_channels_distinct():
     )
 
     # Neighbor orientation changed, so rigid-pair channels must change.
-    delta = torch.max(
-        torch.abs(
-            edge_a[:, sh_dim:]
-            - edge_b[:, sh_dim:]
-        )
-    )
+    delta = torch.max(torch.abs(edge_a[:, sh_dim:] - edge_b[:, sh_dim:]))
 
     assert delta > 1.0e-10
-
 
 
 def test_full_frame_raw_uses_uncompressed_pair_irreps():
@@ -490,13 +452,9 @@ def test_full_frame_raw_uses_uncompressed_pair_irreps():
     assert raw.edge_irreps.dim == 81 * sh_irreps.dim
 
     # MACE receives ordinary geometric SH plus the complete raw basis.
-    assert model.edge_attrs_irreps == (
-        sh_irreps + raw.edge_irreps
-    )
+    assert model.edge_attrs_irreps == (sh_irreps + raw.edge_irreps)
 
-    assert model.edge_attrs_irreps.dim == (
-        sh_irreps.dim + raw.edge_irreps.dim
-    )
+    assert model.edge_attrs_irreps.dim == (sh_irreps.dim + raw.edge_irreps.dim)
 
 
 def test_full_frame_multiplicity_four_expands_rigid_channels():
@@ -515,12 +473,7 @@ def test_full_frame_multiplicity_four_expands_rigid_channels():
     assert rigid.edge_irreps.dim == 4 * sh_irreps.dim
 
     # ordinary SH + four learned rigid copies
-    assert model.edge_attrs_irreps.dim == (
-        5 * sh_irreps.dim
-    )
-
-
-
+    assert model.edge_attrs_irreps.dim == (5 * sh_irreps.dim)
 
 
 def test_irrep_complete_mode_has_all_raw_irrep_types():
@@ -529,43 +482,27 @@ def test_irrep_complete_mode_has_all_raw_irrep_types():
     sh_irreps = model.spherical_harmonics.irreps_out
     rigid = model.rigid_pair_edge_embedding
 
-    raw_types = {
-        (ir.l, ir.p)
-        for _, ir in rigid.full_pair.irreps_out
-    }
+    raw_types = {(ir.l, ir.p) for _, ir in rigid.full_pair.irreps_out}
 
-    compact_types = {
-        (ir.l, ir.p)
-        for _, ir in rigid.edge_irreps
-    }
+    compact_types = {(ir.l, ir.p) for _, ir in rigid.edge_irreps}
 
     assert compact_types == raw_types
 
     # Integration responsibility: ordinary geometric SH and the
     # compact rigid branch must remain distinct concatenated blocks.
-    assert model.edge_attrs_irreps == (
-        sh_irreps + rigid.edge_irreps
-    )
-    assert model.edge_attrs_irreps.dim == (
-        sh_irreps.dim + rigid.edge_irreps.dim
-    )
+    assert model.edge_attrs_irreps == (sh_irreps + rigid.edge_irreps)
+    assert model.edge_attrs_irreps.dim == (sh_irreps.dim + rigid.edge_irreps.dim)
 
 
 def test_irrep_complete_energy_is_globally_rotation_invariant():
     model = _model("full_frame_irrep_complete")
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
 
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
 
-    global_rotation = Rotation.from_rotvec(
-        np.asarray([0.2, 0.5, -0.8])
-    )
+    global_rotation = Rotation.from_rotvec(np.asarray([0.2, 0.5, -0.8]))
 
     positions = np.asarray(
         [
@@ -605,7 +542,6 @@ def test_irrep_complete_energy_is_globally_rotation_invariant():
     )
 
 
-
 def test_invariant_radial_mode_keeps_standard_edge_irreps():
     model = _model("invariant_radial")
 
@@ -637,9 +573,7 @@ def test_invariant_radial_mode_detects_neighbor_rotation():
     axis = np.asarray([0.3, 1.0, -0.2], dtype=float)
     axis /= np.linalg.norm(axis)
 
-    rotated_neighbor = Rotation.from_rotvec(
-        axis * 0.83
-    )
+    rotated_neighbor = Rotation.from_rotvec(axis * 0.83)
 
     out_a = model(
         _batch(_atoms(identity, identity)),
@@ -651,11 +585,7 @@ def test_invariant_radial_mode_detects_neighbor_rotation():
         compute_force=False,
     )
 
-    delta = torch.max(
-        torch.abs(
-            out_a["energy"] - out_b["energy"]
-        )
-    )
+    delta = torch.max(torch.abs(out_a["energy"] - out_b["energy"]))
 
     assert delta > 1.0e-10
 
@@ -677,10 +607,7 @@ def test_invariant_radial_does_not_change_baseline_parameter_initialization():
     common_keys = sorted(
         key
         for key in baseline_state
-        if (
-            key in conditioned_state
-            and not key.startswith(conditioner_prefix)
-        )
+        if (key in conditioned_state and not key.startswith(conditioner_prefix))
     )
 
     assert common_keys
@@ -782,11 +709,7 @@ def test_rigid_pair_modules_are_optimized_and_film_updates():
         model = _model(mode)
         module = getattr(model, attribute)
 
-        target_ids = {
-            id(param)
-            for param in module.parameters()
-            if param.requires_grad
-        }
+        target_ids = {id(param) for param in module.parameters() if param.requires_grad}
 
         assert target_ids, mode
 
@@ -795,10 +718,7 @@ def test_rigid_pair_modules_are_optimized_and_film_updates():
         grouped_ids = []
 
         for group in options["params"]:
-            grouped_ids.extend(
-                id(param)
-                for param in group["params"]
-            )
+            grouped_ids.extend(id(param) for param in group["params"])
 
         for parameter_id in target_ids:
             assert grouped_ids.count(parameter_id) == 1, mode
@@ -906,13 +826,10 @@ def test_learned_rigid_pair_embedding_construction_is_rng_neutral():
 
         # The projection must still contain genuine trainable parameters.
         trainable = [
-            parameter
-            for parameter in module.parameters()
-            if parameter.requires_grad
+            parameter for parameter in module.parameters() if parameter.requires_grad
         ]
 
         assert trainable
-
 
 
 def _activate_full_frame_compact(model):
@@ -935,15 +852,14 @@ def _activate_full_frame_compact(model):
 
 def test_full_frame_compact_projection_gets_gradient_from_zero():
     model = _model("full_frame_compact")
-    assert torch.count_nonzero(
-        model.rigid_pair_edge_embedding.projection.weight
-    ).item() == 0
+    assert (
+        torch.count_nonzero(model.rigid_pair_edge_embedding.projection.weight).item()
+        == 0
+    )
     model.train()
 
     body_i = Rotation.identity()
-    body_j = Rotation.from_rotvec(
-        np.asarray([0.2, 0.4, -0.1])
-    )
+    body_j = Rotation.from_rotvec(np.asarray([0.2, 0.4, -0.1]))
 
     output = model(
         _batch(_atoms(body_i, body_j)),
@@ -953,21 +869,12 @@ def test_full_frame_compact_projection_gets_gradient_from_zero():
     loss = output["energy"].sum()
     loss.backward()
 
-    parameters = list(
-        model.rigid_pair_edge_embedding
-        .projection.parameters()
-    )
+    parameters = list(model.rigid_pair_edge_embedding.projection.parameters())
 
     assert parameters
-    assert all(
-        parameter.grad is not None
-        for parameter in parameters
-    )
+    assert all(parameter.grad is not None for parameter in parameters)
 
-    total_gradient = sum(
-        parameter.grad.abs().sum()
-        for parameter in parameters
-    )
+    total_gradient = sum(parameter.grad.abs().sum() for parameter in parameters)
 
     assert total_gradient > 0.0
 
@@ -982,9 +889,7 @@ def test_full_frame_compact_detects_neighbor_rotation_after_activation():
     axis = np.asarray([0.3, 1.0, -0.2], dtype=float)
     axis /= np.linalg.norm(axis)
 
-    rotated_neighbor = Rotation.from_rotvec(
-        axis * 0.83
-    )
+    rotated_neighbor = Rotation.from_rotvec(axis * 0.83)
 
     out_a = model(
         _batch(_atoms(identity, identity)),
@@ -996,11 +901,7 @@ def test_full_frame_compact_detects_neighbor_rotation_after_activation():
         compute_force=False,
     )
 
-    delta = torch.max(
-        torch.abs(
-            out_a["energy"] - out_b["energy"]
-        )
-    )
+    delta = torch.max(torch.abs(out_a["energy"] - out_b["energy"]))
 
     assert delta > 1.0e-10
 
@@ -1010,17 +911,11 @@ def test_full_frame_compact_energy_is_globally_rotation_invariant():
     _activate_full_frame_compact(model)
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
 
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
 
-    global_rotation = Rotation.from_rotvec(
-        np.asarray([0.2, 0.5, -0.8])
-    )
+    global_rotation = Rotation.from_rotvec(np.asarray([0.2, 0.5, -0.8]))
 
     positions = np.asarray(
         [
@@ -1065,17 +960,11 @@ def test_full_frame_compact_forces_rotate_covariantly():
     _activate_full_frame_compact(model)
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
 
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
 
-    global_rotation = Rotation.from_rotvec(
-        np.asarray([0.2, 0.5, -0.8])
-    )
+    global_rotation = Rotation.from_rotvec(np.asarray([0.2, 0.5, -0.8]))
 
     positions = np.asarray(
         [
@@ -1123,12 +1012,8 @@ def test_full_frame_compact_forces_rotate_covariantly():
 
 
 def _d6_generator_rotations():
-    c6 = Rotation.from_rotvec(
-        np.asarray([0.0, 0.0, np.pi / 3.0])
-    )
-    c2 = Rotation.from_rotvec(
-        np.asarray([np.pi, 0.0, 0.0])
-    )
+    c6 = Rotation.from_rotvec(np.asarray([0.0, 0.0, np.pi / 3.0]))
+    c2 = Rotation.from_rotvec(np.asarray([np.pi, 0.0, 0.0]))
     return (c6, c2)
 
 
@@ -1136,12 +1021,8 @@ def test_d6_frame_energy_is_invariant_to_body_d6_generators():
     model = _model("d6_frame")
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
 
     reference = model(
         _batch(_atoms(body_i, body_j)),
@@ -1188,15 +1069,9 @@ def test_d6_frame_energy_is_globally_rotation_invariant():
     model = _model("d6_frame")
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
-    global_rotation = Rotation.from_rotvec(
-        np.asarray([0.2, 0.5, -0.8])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
+    global_rotation = Rotation.from_rotvec(np.asarray([0.2, 0.5, -0.8]))
 
     positions = np.asarray(
         [
@@ -1222,9 +1097,61 @@ def test_d6_frame_energy_is_globally_rotation_invariant():
             _atoms(
                 global_rotation * body_i,
                 global_rotation * body_j,
-                positions=global_rotation.apply(
-                    positions
-                ),
+                positions=global_rotation.apply(positions),
+            )
+        ),
+        compute_force=False,
+    )
+
+    torch.testing.assert_close(
+        out_a["energy"],
+        out_b["energy"],
+        atol=ATOL,
+        rtol=RTOL,
+    )
+
+
+def test_symmetry_frame_d4_is_globally_rotation_invariant():
+    model = _model(
+        "symmetry_frame",
+        rigid_body_symmetry="D4",
+        rigid_body_lmax=4,
+    )
+    model.eval()
+
+    assert model.rigid_body_symmetry == "D4"
+    assert model.rigid_body_lmax == 4
+    assert str(model.rigid_pair_edge_embedding.body_irreps) == "1x2e+2x4e"
+
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
+    global_rotation = Rotation.from_rotvec(np.asarray([0.2, 0.5, -0.8]))
+
+    positions = np.asarray(
+        [
+            [0.0, 0.0, 0.0],
+            [2.1, 0.7, -0.4],
+        ],
+        dtype=float,
+    )
+
+    out_a = model(
+        _batch(
+            _atoms(
+                body_i,
+                body_j,
+                positions=positions,
+            )
+        ),
+        compute_force=False,
+    )
+
+    out_b = model(
+        _batch(
+            _atoms(
+                global_rotation * body_i,
+                global_rotation * body_j,
+                positions=global_rotation.apply(positions),
             )
         ),
         compute_force=False,
@@ -1242,15 +1169,9 @@ def test_d6_frame_forces_rotate_covariantly():
     model = _model("d6_frame")
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
-    global_rotation = Rotation.from_rotvec(
-        np.asarray([0.2, 0.5, -0.8])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
+    global_rotation = Rotation.from_rotvec(np.asarray([0.2, 0.5, -0.8]))
 
     positions = np.asarray(
         [
@@ -1276,9 +1197,7 @@ def test_d6_frame_forces_rotate_covariantly():
             _atoms(
                 global_rotation * body_i,
                 global_rotation * body_j,
-                positions=global_rotation.apply(
-                    positions
-                ),
+                positions=global_rotation.apply(positions),
             )
         ),
         compute_force=True,
@@ -1323,12 +1242,8 @@ def test_d6_frame_compact_matches_none_at_zero():
     baseline.eval()
     compact.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
 
     out_baseline = baseline(
         _batch(_atoms(body_i, body_j)),
@@ -1365,9 +1280,7 @@ def test_d6_frame_compact_projection_gets_gradient_from_zero():
     model.train()
 
     body_i = Rotation.identity()
-    body_j = Rotation.from_rotvec(
-        np.asarray([0.2, 0.4, -0.1])
-    )
+    body_j = Rotation.from_rotvec(np.asarray([0.2, 0.4, -0.1]))
 
     output = model(
         _batch(_atoms(body_i, body_j)),
@@ -1385,12 +1298,8 @@ def test_d6_frame_compact_is_invariant_to_body_d6_generators():
     _activate_d6_frame_compact(model)
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
 
     reference = model(
         _batch(_atoms(body_i, body_j)),
@@ -1438,16 +1347,10 @@ def test_d6_frame_compact_detects_non_d6_axial_rotation():
     _activate_d6_frame_compact(model)
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
 
-    half_step = Rotation.from_rotvec(
-        np.asarray([0.0, 0.0, np.pi / 6.0])
-    )
+    half_step = Rotation.from_rotvec(np.asarray([0.0, 0.0, np.pi / 6.0]))
 
     out_a = model(
         _batch(_atoms(body_i, body_j)),
@@ -1464,11 +1367,7 @@ def test_d6_frame_compact_detects_non_d6_axial_rotation():
         compute_force=False,
     )
 
-    delta = torch.max(
-        torch.abs(
-            out_a["energy"] - out_b["energy"]
-        )
-    )
+    delta = torch.max(torch.abs(out_a["energy"] - out_b["energy"]))
 
     assert delta > 1.0e-10
 
@@ -1478,15 +1377,9 @@ def test_d6_frame_compact_energy_is_globally_rotation_invariant():
     _activate_d6_frame_compact(model)
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
-    global_rotation = Rotation.from_rotvec(
-        np.asarray([0.2, 0.5, -0.8])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
+    global_rotation = Rotation.from_rotvec(np.asarray([0.2, 0.5, -0.8]))
 
     positions = np.asarray(
         [
@@ -1512,9 +1405,7 @@ def test_d6_frame_compact_energy_is_globally_rotation_invariant():
             _atoms(
                 global_rotation * body_i,
                 global_rotation * body_j,
-                positions=global_rotation.apply(
-                    positions
-                ),
+                positions=global_rotation.apply(positions),
             )
         ),
         compute_force=False,
@@ -1533,15 +1424,9 @@ def test_d6_frame_compact_forces_rotate_covariantly():
     _activate_d6_frame_compact(model)
     model.eval()
 
-    body_i = Rotation.from_rotvec(
-        np.asarray([0.4, -0.2, 0.7])
-    )
-    body_j = Rotation.from_rotvec(
-        np.asarray([-0.3, 0.6, 0.2])
-    )
-    global_rotation = Rotation.from_rotvec(
-        np.asarray([0.2, 0.5, -0.8])
-    )
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
+    global_rotation = Rotation.from_rotvec(np.asarray([0.2, 0.5, -0.8]))
 
     positions = np.asarray(
         [
@@ -1567,9 +1452,7 @@ def test_d6_frame_compact_forces_rotate_covariantly():
             _atoms(
                 global_rotation * body_i,
                 global_rotation * body_j,
-                positions=global_rotation.apply(
-                    positions
-                ),
+                positions=global_rotation.apply(positions),
             )
         ),
         compute_force=True,
@@ -1588,3 +1471,59 @@ def test_d6_frame_compact_forces_rotate_covariantly():
         atol=ATOL,
         rtol=RTOL,
     )
+
+
+def test_symmetry_frame_d4_is_invariant_to_body_group():
+    model = _model(
+        "symmetry_frame",
+        rigid_body_symmetry="D4",
+        rigid_body_lmax=4,
+    )
+    model.eval()
+
+    body_i = Rotation.from_rotvec(np.asarray([0.4, -0.2, 0.7]))
+    body_j = Rotation.from_rotvec(np.asarray([-0.3, 0.6, 0.2]))
+
+    generators = (
+        Rotation.from_rotvec(np.asarray([0.0, 0.0, np.pi / 2.0])),
+        Rotation.from_rotvec(np.asarray([np.pi, 0.0, 0.0])),
+    )
+
+    reference = model(
+        _batch(_atoms(body_i, body_j)),
+        compute_force=False,
+    )["energy"]
+
+    for generator in generators:
+        out_i = model(
+            _batch(
+                _atoms(
+                    body_i * generator,
+                    body_j,
+                )
+            ),
+            compute_force=False,
+        )["energy"]
+
+        out_j = model(
+            _batch(
+                _atoms(
+                    body_i,
+                    body_j * generator,
+                )
+            ),
+            compute_force=False,
+        )["energy"]
+
+        torch.testing.assert_close(
+            out_i,
+            reference,
+            atol=ATOL,
+            rtol=RTOL,
+        )
+        torch.testing.assert_close(
+            out_j,
+            reference,
+            atol=ATOL,
+            rtol=RTOL,
+        )

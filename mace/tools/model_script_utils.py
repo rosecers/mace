@@ -306,6 +306,8 @@ def _build_model(
             rigid_feature_mode=args.rigid_feature_mode,
             rigid_pair_mode=args.rigid_pair_mode,
             rigid_pair_multiplicity=args.rigid_pair_multiplicity,
+            rigid_body_symmetry=args.rigid_body_symmetry,
+            rigid_body_lmax=args.rigid_body_lmax,
         )
     if args.model == "ScaleShiftMACE":
         return modules.ScaleShiftMACE(
@@ -328,6 +330,8 @@ def _build_model(
             rigid_feature_mode=args.rigid_feature_mode,
             rigid_pair_mode=args.rigid_pair_mode,
             rigid_pair_multiplicity=args.rigid_pair_multiplicity,
+            rigid_body_symmetry=args.rigid_body_symmetry,
+            rigid_body_lmax=args.rigid_body_lmax,
         )
     if args.model == "PolarMACE" and model_config_foundation is not None:
         return modules.PolarMACE(**model_config_foundation)
