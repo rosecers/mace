@@ -343,6 +343,11 @@ def extract_config_mace_model(model: torch.nn.Module) -> Dict[str, Any]:
         "rigid_body_lmax": (
             model.rigid_body_lmax if hasattr(model, "rigid_body_lmax") else None
         ),
+        "rigid_body_principal_axis": (
+            model.rigid_body_principal_axis
+            if hasattr(model, "rigid_body_principal_axis")
+            else 2
+        ),
     }
     if model.__class__.__name__ == "MagneticScaleShiftMACE":
         config["m_max"] = model.m_max.cpu().tolist()
@@ -1058,31 +1063,6 @@ def get_params_options(
             }
         )
 
-    # Guard against silently untrained submodules: any trainable parameter
-    # that no group claims would never receive optimizer updates.Submodules
-    # that build their parameters lazily inside the first forward() (e.g. the
-    # external LES Atomwise MLP (created only when les_arguments
-    # ["use_atomwise"] is True) do not exist yet here, so they slip past both
-    # the parameter groups and this check. MACELES with the default
-    # use_atomwise=False has no such parameters.
-    claimed_parameter_ids = set()
-    for group in param_options["params"]:
-        group["params"] = list(group["params"])
-        claimed_parameter_ids.update(id(p) for p in group["params"])
-    unregistered_parameter_names = [
-        parameter_name
-        for parameter_name, parameter in model.named_parameters()
-        if parameter.requires_grad and id(parameter) not in claimed_parameter_ids
-    ]
-    if unregistered_parameter_names:
-        raise ValueError(
-            f"{len(unregistered_parameter_names)} trainable parameters of "
-            f"{type(model).__name__} are not registered in any optimizer "
-            "parameter group and would never be updated during training. Add "
-            "their submodules to the parameter groups in get_params_options:\n"
-            + "\n".join(unregistered_parameter_names)
-        )
-
     # BEGIN rigid-pair optimizer registration
     # Trainable rigid-pair modules are outside the standard
     # node/interactions/products/readouts hierarchy. Register them
@@ -1124,6 +1104,32 @@ def get_params_options(
             }
         )
     # END rigid-pair optimizer registration
+
+    # Guard against silently untrained submodules: any trainable parameter
+    # that no group claims would never receive optimizer updates.Submodules
+    # that build their parameters lazily inside the first forward() (e.g. the
+    # external LES Atomwise MLP (created only when les_arguments
+    # ["use_atomwise"] is True) do not exist yet here, so they slip past both
+    # the parameter groups and this check. MACELES with the default
+    # use_atomwise=False has no such parameters.
+    claimed_parameter_ids = set()
+    for group in param_options["params"]:
+        group["params"] = list(group["params"])
+        claimed_parameter_ids.update(id(p) for p in group["params"])
+    unregistered_parameter_names = [
+        parameter_name
+        for parameter_name, parameter in model.named_parameters()
+        if parameter.requires_grad and id(parameter) not in claimed_parameter_ids
+    ]
+    if unregistered_parameter_names:
+        raise ValueError(
+            f"{len(unregistered_parameter_names)} trainable parameters of "
+            f"{type(model).__name__} are not registered in any optimizer "
+            "parameter group and would never be updated during training. Add "
+            "their submodules to the parameter groups in get_params_options:\n"
+            + "\n".join(unregistered_parameter_names)
+        )
+
 
     return param_options
 

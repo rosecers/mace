@@ -310,6 +310,13 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         help="Maximum body angular rank for symmetry_frame modes.",
     )
     parser.add_argument(
+        "--rigid_body_principal_axis",
+        type=int,
+        default=2,
+        choices=(0, 1, 2),
+        help="Body-frame principal symmetry axis for symmetry_frame modes.",
+    )
+    parser.add_argument(
         "--rigid_pair_multiplicity",
         type=int,
         default=1,

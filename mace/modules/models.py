@@ -122,6 +122,7 @@ class MACE(torch.nn.Module):
         rigid_pair_multiplicity: int = 1,
         rigid_body_symmetry: Optional[str] = None,
         rigid_body_lmax: Optional[int] = None,
+        rigid_body_principal_axis: int = 2,
     ):
         super().__init__()
         self.register_buffer(
@@ -164,6 +165,7 @@ class MACE(torch.nn.Module):
         self.rigid_pair_multiplicity = rigid_pair_multiplicity
         self.rigid_body_symmetry = rigid_body_symmetry
         self.rigid_body_lmax = rigid_body_lmax
+        self.rigid_body_principal_axis = rigid_body_principal_axis
 
         if self.rigid_pair_mode in ("symmetry_frame", "symmetry_frame_compact"):
             if (
@@ -324,6 +326,7 @@ class MACE(torch.nn.Module):
                 body_features=automatic_named_symmetry_body_features(
                     self.rigid_body_symmetry,
                     lmax=self.rigid_body_lmax,
+                    principal_axis=self.rigid_body_principal_axis,
                 ),
                 lmax=max_ell,
                 edge_irreps=sh_irreps,
@@ -336,6 +339,7 @@ class MACE(torch.nn.Module):
                 body_features=automatic_named_symmetry_body_features(
                     self.rigid_body_symmetry,
                     lmax=self.rigid_body_lmax,
+                    principal_axis=self.rigid_body_principal_axis,
                 ),
                 lmax=max_ell,
                 edge_irreps=sh_irreps,
@@ -561,6 +565,8 @@ class MACE(torch.nn.Module):
             self.rigid_body_symmetry = None
         if "rigid_body_lmax" not in self.__dict__:
             self.rigid_body_lmax = None
+        if "rigid_body_principal_axis" not in self.__dict__:
+            self.rigid_body_principal_axis = 2
 
         super().__setstate__(state)
         if not hasattr(self, "rigid_pair_radial_conditioning"):
