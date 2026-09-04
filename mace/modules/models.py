@@ -72,7 +72,12 @@ def _rigid_feature_data_keys(mode: str) -> tuple[str, str]:
 
 @compile_mode("script")
 class MACE(torch.nn.Module):
-    __constants__ = ["rigid_feature_mode", "rigid_pair_mode", "use_rigid_features"]
+    __constants__ = [
+        "rigid_feature_mode",
+        "rigid_pair_mode",
+        "use_rigid_features",
+        "use_rigid_pair_features",
+    ]
 
     def __init__(
         self,
@@ -140,6 +145,7 @@ class MACE(torch.nn.Module):
         self.rigid_feature_mode = validate_rigid_feature_mode(rigid_feature_mode)
         self.use_rigid_features = self.rigid_feature_mode != "none"
         self.rigid_pair_mode = validate_rigid_pair_mode(rigid_pair_mode)
+        self.use_rigid_pair_features = self.rigid_pair_mode != "none"
 
         if (
             isinstance(rigid_pair_multiplicity, bool)
@@ -498,24 +504,16 @@ class MACE(torch.nn.Module):
                 )
 
     def __setstate__(self, state):
-        # Registered nn.Module children are serialized inside
-        # state["_modules"], not directly in self.__dict__.  Modify the
-        # serialized module registry only for genuinely old models that
-        # predate invariant-radial conditioning.  Do not overwrite a
-        # conditioner that is already present in the pickle.
-        modules = state.get("_modules")
-        if (
-            isinstance(modules, dict)
-            and "rigid_pair_radial_conditioning" not in modules
-        ):
-            modules["rigid_pair_radial_conditioning"] = None
-
         if "rigid_pair_multiplicity" not in self.__dict__:
             self.rigid_pair_multiplicity = 1
 
         super().__setstate__(state)
+        if not hasattr(self, "rigid_pair_radial_conditioning"):
+            self.rigid_pair_radial_conditioning = None
         if not hasattr(self, "rigid_pair_mode"):
             self.rigid_pair_mode = "none"
+        if not hasattr(self, "use_rigid_pair_features"):
+            self.use_rigid_pair_features = self.rigid_pair_mode != "none"
         if not hasattr(self, "rigid_feature_mode"):
             self.rigid_feature_mode = "none"
         if not hasattr(self, "use_rigid_features"):
@@ -605,47 +603,49 @@ class MACE(torch.nn.Module):
             )
             node_feats = node_feats + inertia_node_feats
         edge_attrs = self.spherical_harmonics(vectors)
-        if self.rigid_pair_mode in (
-            "full_frame_compact",
-            "d6_frame_compact",
-        ):
-            rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
-                data["quaternions"],
-                data["edge_index"],
-                vectors,
-            )
-            edge_attrs = edge_attrs + rigid_pair_edge_attrs
+        if self.use_rigid_pair_features:
+            if self.rigid_pair_mode in (
+                "full_frame_compact",
+                "d6_frame_compact",
+            ):
+                rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
+                    data["quaternions"],
+                    data["edge_index"],
+                    vectors,
+                )
+                edge_attrs = edge_attrs + rigid_pair_edge_attrs
 
-        elif self.rigid_pair_mode in (
-            "full_frame",
-            "full_frame_irrep_complete",
-            "full_frame_raw",
-            "c2_frame",
-            "d6_frame",
-        ):
-            rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
-                data["quaternions"],
-                data["edge_index"],
-                vectors,
-            )
-            edge_attrs = torch.cat(
-                (
-                    edge_attrs,
-                    rigid_pair_edge_attrs,
-                ),
-                dim=-1,
-            )
+            elif self.rigid_pair_mode in (
+                "full_frame",
+                "full_frame_irrep_complete",
+                "full_frame_raw",
+                "c2_frame",
+                "d6_frame",
+            ):
+                rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
+                    data["quaternions"],
+                    data["edge_index"],
+                    vectors,
+                )
+                edge_attrs = torch.cat(
+                    (
+                        edge_attrs,
+                        rigid_pair_edge_attrs,
+                    ),
+                    dim=-1,
+                )
         edge_feats, cutoff = self.radial_embedding(
             lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
 
-        if self.rigid_pair_mode == "invariant_radial":
-            edge_feats = self.rigid_pair_radial_conditioning(
-                edge_feats=edge_feats,
-                quaternions=data["quaternions"],
-                edge_index=data["edge_index"],
-                edge_vectors=vectors,
-            )
+        if self.use_rigid_pair_features:
+            if self.rigid_pair_mode == "invariant_radial":
+                edge_feats = self.rigid_pair_radial_conditioning(
+                    edge_feats=edge_feats,
+                    quaternions=data["quaternions"],
+                    edge_index=data["edge_index"],
+                    edge_vectors=vectors,
+                )
 
         if self.use_rigid_features:
             inertia_feats = inertia_edge_invariants(
@@ -777,7 +777,12 @@ class MACE(torch.nn.Module):
 
 @compile_mode("script")
 class ScaleShiftMACE(MACE):
-    __constants__ = ["rigid_feature_mode", "rigid_pair_mode", "use_rigid_features"]
+    __constants__ = [
+        "rigid_feature_mode",
+        "rigid_pair_mode",
+        "use_rigid_features",
+        "use_rigid_pair_features",
+    ]
 
     def __init__(
         self,
@@ -863,47 +868,49 @@ class ScaleShiftMACE(MACE):
             )
             node_feats = node_feats + inertia_node_feats
         edge_attrs = self.spherical_harmonics(vectors)
-        if self.rigid_pair_mode in (
-            "full_frame_compact",
-            "d6_frame_compact",
-        ):
-            rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
-                data["quaternions"],
-                data["edge_index"],
-                vectors,
-            )
-            edge_attrs = edge_attrs + rigid_pair_edge_attrs
+        if self.use_rigid_pair_features:
+            if self.rigid_pair_mode in (
+                "full_frame_compact",
+                "d6_frame_compact",
+            ):
+                rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
+                    data["quaternions"],
+                    data["edge_index"],
+                    vectors,
+                )
+                edge_attrs = edge_attrs + rigid_pair_edge_attrs
 
-        elif self.rigid_pair_mode in (
-            "full_frame",
-            "full_frame_irrep_complete",
-            "full_frame_raw",
-            "c2_frame",
-            "d6_frame",
-        ):
-            rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
-                data["quaternions"],
-                data["edge_index"],
-                vectors,
-            )
-            edge_attrs = torch.cat(
-                (
-                    edge_attrs,
-                    rigid_pair_edge_attrs,
-                ),
-                dim=-1,
-            )
+            elif self.rigid_pair_mode in (
+                "full_frame",
+                "full_frame_irrep_complete",
+                "full_frame_raw",
+                "c2_frame",
+                "d6_frame",
+            ):
+                rigid_pair_edge_attrs = self.rigid_pair_edge_embedding(
+                    data["quaternions"],
+                    data["edge_index"],
+                    vectors,
+                )
+                edge_attrs = torch.cat(
+                    (
+                        edge_attrs,
+                        rigid_pair_edge_attrs,
+                    ),
+                    dim=-1,
+                )
         edge_feats, cutoff = self.radial_embedding(
             lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
 
-        if self.rigid_pair_mode == "invariant_radial":
-            edge_feats = self.rigid_pair_radial_conditioning(
-                edge_feats=edge_feats,
-                quaternions=data["quaternions"],
-                edge_index=data["edge_index"],
-                edge_vectors=vectors,
-            )
+        if self.use_rigid_pair_features:
+            if self.rigid_pair_mode == "invariant_radial":
+                edge_feats = self.rigid_pair_radial_conditioning(
+                    edge_feats=edge_feats,
+                    quaternions=data["quaternions"],
+                    edge_index=data["edge_index"],
+                    edge_vectors=vectors,
+                )
 
         if self.use_rigid_features:
             inertia_feats = inertia_edge_invariants(
