@@ -13,9 +13,7 @@ from e3nn import o3
 from e3nn.util.jit import compile_mode
 
 from mace.data.rigid_body import (
-    cartesian_tensor_to_irreps,
     inertia_edge_invariants,
-    quaternion_to_matrix,
 )
 from mace.data.rigid_features import validate_rigid_feature_mode
 from mace.modules.embeddings import GenericJointEmbedding
@@ -588,7 +586,7 @@ class MACE(torch.nn.Module):
         else:
             rigid_tensor = data[self.rigid_tensor_key]
             rigid_irreps = data[self.rigid_irreps_key]
-            edge_invariant_tensor = data["inertia_tensor"]
+            edge_invariant_tensor = rigid_tensor
             inertia_scalar = rigid_irreps[:, :1]
             inertia_tensor_irreps = rigid_irreps[:, 1:]
             if not self.use_rigid_scalar:
@@ -846,7 +844,7 @@ class ScaleShiftMACE(MACE):
         else:
             rigid_tensor = data[self.rigid_tensor_key]
             rigid_irreps = data[self.rigid_irreps_key]
-            edge_invariant_tensor = data["inertia_tensor"]
+            edge_invariant_tensor = rigid_tensor
             inertia_scalar = rigid_irreps[:, :1]
             inertia_tensor_irreps = rigid_irreps[:, 1:]
             if not self.use_rigid_scalar:
